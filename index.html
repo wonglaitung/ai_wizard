@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 对话框</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 对话框触发按钮 -->
+    <div id="chat-trigger" class="chat-trigger">
+        <span>🤖</span>
+    </div>
+
+    <!-- 对话框 -->
+    <div id="chat-container" class="chat-container hidden">
+        <div class="chat-header">
+            <span>AI 对话</span>
+            <button id="close-chat" class="close-btn">&times;</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-container">
+            <input type="text" id="user-input" placeholder="输入消息...">
+            <button id="send-btn">发送</button>
+        </div>
+        <!-- 预设问题 -->
+        <div class="preset-questions">
+            <button class="preset-btn" data-question="你能做什么">你能做什么</button>
+            <button class="preset-btn" data-question="你是谁">你是谁</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
