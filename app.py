@@ -23,6 +23,10 @@ def index():
 def chat_page():
     return send_from_directory('.', 'chat.html')
 
+@app.route('/settings')
+def settings_page():
+    return send_from_directory('.', 'settings.html')
+
 @app.route('/<path:filename>')
 def static_files(filename):
     return send_from_directory('.', filename)
@@ -79,4 +83,4 @@ def chat():
         return Response(error_generator(), mimetype='text/event-stream')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5001)

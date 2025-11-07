@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 对话框 - 设置</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="settings-page">
+        <div class="page-content">
+            <h2>设置</h2>
+            <div class="settings-container">
+                <div class="setting-group">
+                    <h3>大模型参数</h3>
+                    <div class="setting-item">
+                        <label for="base-url">基础URL:</label>
+                        <input type="text" id="base-url" placeholder="例如: https://dashscope.aliyuncs.com/compatible-mode/v1" value="https://dashscope.aliyuncs.com/compatible-mode/v1">
+                    </div>
+                    <div class="setting-item">
+                        <label for="api-key">API密钥:</label>
+                        <input type="password" id="api-key" placeholder="请输入API密钥">
+                    </div>
+                    <div class="setting-item">
+                        <label for="model-name">模型名称:</label>
+                        <input type="text" id="model-name" placeholder="例如: qwen-max, qwen-plus" value="qwen-max">
+                    </div>
+                    <div class="setting-item">
+                        <label for="temperature">温度 (Temperature):</label>
+                        <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.1">
+                        <span id="temperature-value">0.1</span>
+                    </div>
+                    <div class="setting-item">
+                        <label for="max-tokens">最大Token数:</label>
+                        <input type="number" id="max-tokens" min="1" max="131072" value="8192">
+                    </div>
+                    <div class="setting-item">
+                        <label for="top-p">Top-P:</label>
+                        <input type="range" id="top-p" min="0" max="1" step="0.1" value="0.1">
+                        <span id="top-p-value">0.1</span>
+                    </div>
+                    <div class="setting-item">
+                        <label for="frequency-penalty">频率惩罚:</label>
+                        <input type="range" id="frequency-penalty" min="0" max="2" step="0.1" value="0.5">
+                        <span id="frequency-penalty-value">0.5</span>
+                    </div>
+                </div>
+                <button id="save-settings" class="save-btn">保存设置</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 页面加载完成后初始化设置功能
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取设置页面相关元素
+            const baseUrlInput = document.getElementById('base-url');
+            const apiKeyInput = document.getElementById('api-key');
+            const modelNameInput = document.getElementById('model-name');
+            const temperatureInput = document.getElementById('temperature');
+            const maxTokensInput = document.getElementById('max-tokens');
+            const topPInput = document.getElementById('top-p');
+            const frequencyPenaltyInput = document.getElementById('frequency-penalty');
+            const temperatureValue = document.getElementById('temperature-value');
+            const topPValue = document.getElementById('top-p-value');
+            const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+            const saveSettingsBtn = document.getElementById('save-settings');
+
+            // 从本地存储加载已保存的设置
+            const savedSettings = localStorage.getItem('aiSettings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                if (settings.baseUrl) baseUrlInput.value = settings.baseUrl;
+                if (settings.apiKey) apiKeyInput.value = settings.apiKey;
+                if (settings.modelName) modelNameInput.value = settings.modelName;
+                if (settings.temperature !== undefined) {
+                    temperatureInput.value = settings.temperature;
+                    temperatureValue.textContent = settings.temperature;
+                }
+                if (settings.maxTokens !== undefined) maxTokensInput.value = settings.maxTokens;
+                if (settings.topP !== undefined) {
+                    topPInput.value = settings.topP;
+                    topPValue.textContent = settings.topP;
+                }
+                if (settings.frequencyPenalty !== undefined) {
+                    frequencyPenaltyInput.value = settings.frequencyPenalty;
+                    frequencyPenaltyValue.textContent = settings.frequencyPenalty;
+                }
+            }
+
+            // 更新滑块值显示
+            if (temperatureInput && temperatureValue) {
+                temperatureInput.addEventListener('input', () => {
+                    temperatureValue.textContent = temperatureInput.value;
+                });
+            }
+
+            if (topPInput && topPValue) {
+                topPInput.addEventListener('input', () => {
+                    topPValue.textContent = topPInput.value;
+                });
+            }
+
+            if (frequencyPenaltyInput && frequencyPenaltyValue) {
+                frequencyPenaltyInput.addEventListener('input', () => {
+                    frequencyPenaltyValue.textContent = frequencyPenaltyInput.value;
+                });
+            }
+
+            // 保存设置
+            if (saveSettingsBtn) {
+                saveSettingsBtn.addEventListener('click', () => {
+                    const settings = {
+                        baseUrl: baseUrlInput ? baseUrlInput.value : '',
+                        apiKey: apiKeyInput ? apiKeyInput.value : '',
+                        modelName: modelNameInput ? modelNameInput.value : '',
+                        temperature: temperatureInput ? parseFloat(temperatureInput.value) : 0.7,
+                        maxTokens: maxTokensInput ? parseInt(maxTokensInput.value) : 2048,
+                        topP: topPInput ? parseFloat(topPInput.value) : 0.9,
+                        frequencyPenalty: frequencyPenaltyInput ? parseFloat(frequencyPenaltyInput.value) : 0.5
+                    };
+                    
+                    // 保存到本地存储
+                    localStorage.setItem('aiSettings', JSON.stringify(settings));
+                    
+                    alert('设置已保存！');
+                });
+            }
+        });
+    </script>
+</body>
+</html>

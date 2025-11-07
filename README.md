@@ -54,7 +54,8 @@ python app.py
 ```
 .
 ├── app.py                 # Flask 后端应用
-├── main.html              # 前端 HTML 页面
+├── main.html              # 前端主页面
+├── settings.html          # 前端设置页面
 ├── styles.css             # 前端样式表
 ├── script.js              # 前端 JavaScript 逻辑
 ├── llm_services/          # LLM 服务模块
