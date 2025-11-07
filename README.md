@@ -29,7 +29,7 @@ pip install flask requests
 确保已设置 QWEN API 密钥：
 
 ```bash
-source set_key.sh
+export QWEN_API_KEY=sk-xxx
 ```
 
 ### 启动应用
