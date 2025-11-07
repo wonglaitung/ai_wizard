@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 对话框</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 主页面布局 -->
+    <div class="main-container">
+        <!-- 左侧菜单 -->
+        <div class="sidebar">
+            <div class="menu-header">
+                <h2>AI 助手</h2>
+                <button id="toggle-sidebar" class="toggle-sidebar-btn">◀</button>
+            </div>
+            <ul class="menu-list">
+                <li class="menu-item active" data-page="chat">
+                    <span>💬</span>
+                    <span>新对话</span>
+                </li>
+                <li class="menu-item" data-page="settings">
+                    <span>⚙️</span>
+                    <span>设置</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- 右侧内容区域 -->
+        <div class="content-area">
+            <!-- 新对话页面 -->
+            <div id="chat-page" class="page active">
+                <!-- 对话框触发按钮 -->
+                <div id="chat-trigger" class="chat-trigger">
+                    <span>🤖</span>
+                </div>
+
+                <!-- 对话框 -->
+                <div id="chat-container" class="chat-container hidden">
+                    <div class="chat-header">
+                        <span>AI 对话</span>
+                        <div class="chat-controls">
+                            <label class="switch">
+                                <input type="checkbox" id="output-toggle">
+                                <span class="slider"></span>
+                            </label>
+                            <span class="toggle-label">页面输出</span>
+                            <button id="clear-chat" class="clear-btn">清除</button>
+                            <button id="close-chat" class="close-btn">&times;</button>
+                        </div>
+                    </div>
+                    <div id="chat-messages" class="chat-messages"></div>
+                    <div class="chat-input-container">
+                        <input type="text" id="user-input" placeholder="输入消息...">
+                        <button id="send-btn">发送</button>
+                    </div>
+                    <!-- 预设问题 -->
+                    <div class="preset-questions">
+                        <button class="preset-btn" data-question="你能做什么">你能做什么</button>
+                        <button class="preset-btn" data-question="你是谁">你是谁</button>
+                    </div>
+                </div>
+
+                <!-- 页面输出区域 -->
+    <div id="page-output" class="page-output hidden">
+        <div class="output-header">
+            <h2>对话记录</h2>
+        </div>
+        <div id="output-messages" class="output-messages"></div>
+    </div>
+            </div>
+
+            <!-- 设置页面 -->
+            <div id="settings-page" class="page">
+                <div class="page-content">
+                    <h2>设置</h2>
+                    <p>这里是设置页面</p>
+                </div>
+            </div>
+
+            
+        </div>
+    </div>
+
+    <!-- 在页面加载后初始化默认显示的页面 -->
+    <script>
+        // 默认显示新对话页面
+        document.addEventListener('DOMContentLoaded', function() {
+            // 默认激活第一个菜单项和页面
+            const firstMenuItem = document.querySelector('.menu-item[data-page="chat"]');
+            const chatPage = document.getElementById('chat-page');
+            
+            if (firstMenuItem) {
+                firstMenuItem.classList.add('active');
+            }
+            
+            if (chatPage) {
+                chatPage.classList.add('active');
+            }
+        });
+    </script>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -22,6 +22,7 @@
                     <span class="slider"></span>
                 </label>
                 <span class="toggle-label">页面输出</span>
+                <button id="clear-chat" class="clear-btn">清除</button>
                 <button id="close-chat" class="close-btn">&times;</button>
             </div>
         </div>
@@ -41,11 +42,33 @@
     <div id="page-output" class="page-output hidden">
         <div class="output-header">
             <h2>对话记录</h2>
-            <button id="clear-output" class="clear-btn">清除</button>
         </div>
         <div id="output-messages" class="output-messages"></div>
     </div>
 
+    <script>
+        // 确保对话框不会被菜单挡住
+        document.addEventListener('DOMContentLoaded', function() {
+            // 调整对话框的右边距，为菜单留出空间
+            const chatContainer = document.getElementById('chat-container');
+            const pageOutput = document.getElementById('page-output');
+            
+            if (chatContainer) {
+                // 添加样式以确保对话框不会被菜单挡住
+                const style = document.createElement('style');
+                style.textContent = `
+                    .chat-container {
+                        right: 20px !important;
+                    }
+                    
+                    .page-output {
+                        right: 440px !important; /* 为对话框留出空间 */
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        });
+    </script>
     <script src="script.js"></script>
 </body>
 </html>

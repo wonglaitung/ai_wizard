@@ -2,7 +2,7 @@
 const chatTrigger = document.getElementById('chat-trigger');
 const chatContainer = document.getElementById('chat-container');
 const closeChat = document.getElementById('close-chat');
-const clearOutput = document.getElementById('clear-output');
+const clearChat = document.getElementById('clear-chat');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const chatMessages = document.getElementById('chat-messages');
@@ -10,6 +10,69 @@ const presetButtons = document.querySelectorAll('.preset-btn');
 const outputToggle = document.getElementById('output-toggle');
 const pageOutput = document.getElementById('page-output');
 const outputMessages = document.getElementById('output-messages');
+const menuItems = document.querySelectorAll('.menu-item');
+const pages = document.querySelectorAll('.page');
+const toggleSidebarBtn = document.getElementById('toggle-sidebar');
+const sidebar = document.querySelector('.sidebar');
+const contentArea = document.querySelector('.content-area');
+
+// 菜单收起功能
+toggleSidebarBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
+    contentArea.classList.toggle('sidebar-collapsed');
+    
+    // 更新按钮图标
+    if (sidebar.classList.contains('collapsed')) {
+        toggleSidebarBtn.textContent = '▶';
+    } else {
+        toggleSidebarBtn.textContent = '◀';
+    }
+    
+    // 调整页面输出区域的位置
+    adjustPageOutputPosition();
+});
+
+// 页面切换功能
+menuItems.forEach(item => {
+    item.addEventListener('click', () => {
+        // 如果菜单是收起状态，点击菜单项时展开菜单
+        if (sidebar.classList.contains('collapsed')) {
+            sidebar.classList.remove('collapsed');
+            contentArea.classList.remove('sidebar-collapsed');
+            toggleSidebarBtn.textContent = '◀';
+            // 调整页面输出区域的位置
+            adjustPageOutputPosition();
+        }
+        
+        // 移除所有菜单项的激活状态
+        menuItems.forEach(menuItem => menuItem.classList.remove('active'));
+        // 添加激活状态到当前菜单项
+        item.classList.add('active');
+        
+        // 隐藏所有页面
+        pages.forEach(page => page.classList.remove('active'));
+        
+        // 显示对应页面
+        const pageId = item.getAttribute('data-page') + '-page';
+        const targetPage = document.getElementById(pageId);
+        if (targetPage) {
+            targetPage.classList.add('active');
+        }
+    });
+});
+
+// 调整页面输出区域位置的函数
+function adjustPageOutputPosition() {
+    if (pageOutput) {
+        if (sidebar.classList.contains('collapsed')) {
+            // 菜单收起时，页面输出区域左边距减少
+            pageOutput.style.left = '80px';
+        } else {
+            // 菜单展开时，页面输出区域左边距增加
+            pageOutput.style.left = '270px';
+        }
+    }
+}
 
 // 显示对话框
 chatTrigger.addEventListener('click', () => {
@@ -22,13 +85,22 @@ closeChat.addEventListener('click', () => {
     chatContainer.classList.add('hidden');
 });
 
-// 清除页面输出内容事件
-clearOutput.addEventListener('click', () => {
-    if (confirm('确定要清除所有对话内容吗？')) {
-        chatMessages.innerHTML = '';
-        outputMessages.innerHTML = '';
-    }
-});
+// 清除对话框内容事件
+if (clearChat) {
+    clearChat.addEventListener('click', () => {
+        if (confirm('确定要清除所有对话内容吗？')) {
+            // 清除对话框中的内容
+            if (chatMessages) {
+                chatMessages.innerHTML = '';
+            }
+            
+            // 如果页面输出区域是开启的，也清除页面输出区域的内容
+            if (outputMessages) {
+                outputMessages.innerHTML = '';
+            }
+        }
+    });
+}
 
 // 开关切换事件
 outputToggle.addEventListener('change', () => {
