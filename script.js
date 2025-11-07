@@ -1,4 +1,4 @@
-// 获取DOM元素
+// 获取DOM元素 - 只有在元素存在的情况下才获取
 const chatTrigger = document.getElementById('chat-trigger');
 const chatContainer = document.getElementById('chat-container');
 const closeChat = document.getElementById('close-chat');
@@ -16,18 +16,8 @@ const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 const sidebar = document.querySelector('.sidebar');
 const contentArea = document.querySelector('.content-area');
 
-// 设置页面相关元素
-const apiKeyInput = document.getElementById('api-key');
-const baseUrlInput = document.getElementById('base-url');
-const modelNameInput = document.getElementById('model-name');
-const temperatureInput = document.getElementById('temperature');
-const maxTokensInput = document.getElementById('max-tokens');
-const topPInput = document.getElementById('top-p');
-const frequencyPenaltyInput = document.getElementById('frequency-penalty');
-const temperatureValue = document.getElementById('temperature-value');
-const topPValue = document.getElementById('top-p-value');
-const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
-const saveSettingsBtn = document.getElementById('save-settings');
+// 设置页面相关元素 - 在需要时再获取
+let apiKeyInput, baseUrlInput, modelNameInput, temperatureInput, maxTokensInput, topPInput, frequencyPenaltyInput, temperatureValue, topPValue, frequencyPenaltyValue, saveSettingsBtn;
 
 // 菜单收起功能
 toggleSidebarBtn.addEventListener('click', () => {
@@ -46,33 +36,169 @@ toggleSidebarBtn.addEventListener('click', () => {
 });
 
 // 页面切换功能
-menuItems.forEach(item => {
-    item.addEventListener('click', () => {
-        // 如果菜单是收起状态，点击菜单项时展开菜单
-        if (sidebar.classList.contains('collapsed')) {
-            sidebar.classList.remove('collapsed');
-            contentArea.classList.remove('sidebar-collapsed');
-            toggleSidebarBtn.textContent = '◀';
-            // 调整页面输出区域的位置
-            adjustPageOutputPosition();
-        }
-        
-        // 移除所有菜单项的激活状态
-        menuItems.forEach(menuItem => menuItem.classList.remove('active'));
-        // 添加激活状态到当前菜单项
-        item.classList.add('active');
-        
-        // 隐藏所有页面
-        pages.forEach(page => page.classList.remove('active'));
-        
-        // 显示对应页面
-        const pageId = item.getAttribute('data-page') + '-page';
-        const targetPage = document.getElementById(pageId);
-        if (targetPage) {
-            targetPage.classList.add('active');
-        }
+if (menuItems && pages) {
+    menuItems.forEach(item => {
+        item.addEventListener('click', () => {
+            // 如果菜单是收起状态，点击菜单项时展开菜单
+            if (sidebar && sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                contentArea.classList.remove('sidebar-collapsed');
+                toggleSidebarBtn.textContent = '◀';
+                // 调整页面输出区域的位置
+                adjustPageOutputPosition();
+            }
+            
+            // 移除所有菜单项的激活状态
+            menuItems.forEach(menuItem => menuItem.classList.remove('active'));
+            // 添加激活状态到当前菜单项
+            item.classList.add('active');
+            
+            // 隐藏所有页面
+            pages.forEach(page => page.classList.remove('active'));
+            
+            // 显示对应页面
+            const pageId = item.getAttribute('data-page') + '-page';
+            const targetPage = document.getElementById(pageId);
+            if (targetPage) {
+                targetPage.classList.add('active');
+                
+                // 如果是设置页面，加载设置内容
+                if (item.getAttribute('data-page') === 'settings') {
+                    loadSettingsPage(targetPage);
+                }
+            }
+        });
     });
-});
+}
+
+// 加载设置页面内容
+async function loadSettingsPage(pageElement) {
+    try {
+        const response = await fetch('/settings');
+        if (response.ok) {
+            const htmlContent = await response.text();
+            // 提取body中的内容
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+            const settingsContent = doc.querySelector('.settings-page .page-content');
+            
+            if (settingsContent) {
+                // 将设置页面内容插入到目标页面中
+                const targetContentArea = pageElement.querySelector('.page-content');
+                targetContentArea.innerHTML = settingsContent.innerHTML;
+                
+                // 重新初始化设置页面的功能
+                initializeSettingsPageFunctions();
+            }
+        }
+    } catch (error) {
+        console.error('加载设置页面失败:', error);
+        const targetContentArea = pageElement.querySelector('.page-content');
+        targetContentArea.innerHTML = '<p>加载设置页面失败，请稍后重试。</p>';
+    }
+}
+
+// 初始化设置页面功能
+function initializeSettingsPageFunctions() {
+    // 使用 setTimeout 确保DOM已完全加载
+    setTimeout(() => {
+        // 检查是否在设置页面
+        const isSettingsPage = document.getElementById('settings-page') !== null;
+        // 如果不在设置页面，直接返回
+        if (!isSettingsPage) {
+            // 检查是否在主页面且当前激活的是设置页面
+            const activeMenuItem = document.querySelector('.menu-item.active');
+            if (!activeMenuItem || activeMenuItem.getAttribute('data-page') !== 'settings') {
+                return;
+            }
+        }
+        
+        // 获取设置页面相关元素
+        const baseUrlInput = document.getElementById('base-url');
+        const apiKeyInput = document.getElementById('api-key');
+        const modelNameInput = document.getElementById('model-name');
+        const temperatureInput = document.getElementById('temperature');
+        const maxTokensInput = document.getElementById('max-tokens');
+        const topPInput = document.getElementById('top-p');
+        const frequencyPenaltyInput = document.getElementById('frequency-penalty');
+        const temperatureValue = document.getElementById('temperature-value');
+        const topPValue = document.getElementById('top-p-value');
+        const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+        const saveSettingsBtn = document.getElementById('save-settings');
+
+        // 如果元素存在，则初始化功能
+        if (baseUrlInput && apiKeyInput && modelNameInput && temperatureInput && 
+            maxTokensInput && topPInput && frequencyPenaltyInput && temperatureValue && 
+            topPValue && frequencyPenaltyValue && saveSettingsBtn) {
+            
+            // 从本地存储加载已保存的设置
+            const savedSettings = localStorage.getItem('aiSettings');
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                if (settings.baseUrl) baseUrlInput.value = settings.baseUrl;
+                if (settings.apiKey) apiKeyInput.value = settings.apiKey;
+                if (settings.modelName) modelNameInput.value = settings.modelName;
+                if (settings.temperature !== undefined) {
+                    temperatureInput.value = settings.temperature;
+                    temperatureValue.textContent = settings.temperature;
+                }
+                if (settings.maxTokens !== undefined) maxTokensInput.value = settings.maxTokens;
+                if (settings.topP !== undefined) {
+                    topPInput.value = settings.topP;
+                    topPValue.textContent = settings.topP;
+                }
+                if (settings.frequencyPenalty !== undefined) {
+                    frequencyPenaltyInput.value = settings.frequencyPenalty;
+                    frequencyPenaltyValue.textContent = settings.frequencyPenalty;
+                }
+            }
+            
+            // 移除之前的事件监听器（如果存在）
+            // 创建新的事件处理函数
+            function updateTemperatureValue() {
+                temperatureValue.textContent = temperatureInput.value;
+            }
+            
+            function updateTopPValue() {
+                topPValue.textContent = topPInput.value;
+            }
+            
+            function updateFrequencyPenaltyValue() {
+                frequencyPenaltyValue.textContent = frequencyPenaltyInput.value;
+            }
+            
+            function handleSaveSettings() {
+                const settings = {
+                    baseUrl: baseUrlInput.value,
+                    apiKey: apiKeyInput.value,
+                    modelName: modelNameInput.value,
+                    temperature: parseFloat(temperatureInput.value),
+                    maxTokens: parseInt(maxTokensInput.value),
+                    topP: parseFloat(topPInput.value),
+                    frequencyPenalty: parseFloat(frequencyPenaltyInput.value)
+                };
+                
+                // 保存到本地存储
+                localStorage.setItem('aiSettings', JSON.stringify(settings));
+                
+                alert('设置已保存！');
+            }
+            
+            // 添加事件监听器
+            temperatureInput.removeEventListener('input', updateTemperatureValue);
+            temperatureInput.addEventListener('input', updateTemperatureValue);
+
+            topPInput.removeEventListener('input', updateTopPValue);
+            topPInput.addEventListener('input', updateTopPValue);
+
+            frequencyPenaltyInput.removeEventListener('input', updateFrequencyPenaltyValue);
+            frequencyPenaltyInput.addEventListener('input', updateFrequencyPenaltyValue);
+
+            saveSettingsBtn.removeEventListener('click', handleSaveSettings);
+            saveSettingsBtn.addEventListener('click', handleSaveSettings);
+        }
+    }, 100); // 延迟100毫秒确保内容已加载
+}
 
 // 调整页面输出区域位置的函数
 function adjustPageOutputPosition() {
@@ -115,37 +241,8 @@ if (clearChat) {
     });
 }
 
-// 设置页面功能
-// 更新滑块值显示
-temperatureInput.addEventListener('input', () => {
-    temperatureValue.textContent = temperatureInput.value;
-});
-
-topPInput.addEventListener('input', () => {
-    topPValue.textContent = topPInput.value;
-});
-
-frequencyPenaltyInput.addEventListener('input', () => {
-    frequencyPenaltyValue.textContent = frequencyPenaltyInput.value;
-});
-
-// 保存设置
-saveSettingsBtn.addEventListener('click', () => {
-    const settings = {
-        apiKey: apiKeyInput.value,
-        baseUrl: baseUrlInput.value,
-        modelName: modelNameInput.value,
-        temperature: parseFloat(temperatureInput.value),
-        maxTokens: parseInt(maxTokensInput.value),
-        topP: parseFloat(topPInput.value),
-        frequencyPenalty: parseFloat(frequencyPenaltyInput.value)
-    };
-    
-    // 保存到本地存储
-    localStorage.setItem('aiSettings', JSON.stringify(settings));
-    
-    alert('设置已保存！');
-});
+// 设置页面功能 - 只在设置页面中初始化
+// 这些功能现在在 initializeSettingsPageFunctions 函数中处理
 
 // 开关切换事件
 outputToggle.addEventListener('change', () => {
