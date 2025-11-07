@@ -83,4 +83,4 @@ def chat():
         return Response(error_generator(), mimetype='text/event-stream')
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    app.run(debug=True, host='0.0.0.0', port=5002)

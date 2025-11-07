@@ -391,10 +391,69 @@ input:checked + .slider:before {
     word-wrap: break-word;
 }
 
+.message a {
+    color: #007bff;
+    text-decoration: underline;
+}
+
+.message code {
+    background-color: #f1f1f1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.message pre {
+    background-color: #f1f1f1;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.message pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.message blockquote {
+    border-left: 3px solid #007bff;
+    padding-left: 10px;
+    margin: 10px 0;
+    color: #666;
+}
+
+.message ul, .message ol {
+    padding-left: 20px;
+}
+
+.message h1, .message h2, .message h3 {
+    margin: 10px 0 5px 0;
+}
+
+.message h1 {
+    font-size: 1.5em;
+}
+
+.message h2 {
+    font-size: 1.3em;
+}
+
+.message h3 {
+    font-size: 1.1em;
+}
+
 .user-message {
     align-self: flex-end;
     background-color: #007bff;
     color: white;
+}
+
+.user-message a {
+    color: #cce5ff;
+}
+
+.user-message code {
+    background-color: #0056b3;
 }
 
 .ai-message {
@@ -507,11 +566,70 @@ input:checked + .slider:before {
     word-wrap: break-word;
 }
 
+.output-message a {
+    color: #007bff;
+    text-decoration: underline;
+}
+
+.output-message code {
+    background-color: #f1f1f1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.output-message pre {
+    background-color: #f1f1f1;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.output-message pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.output-message blockquote {
+    border-left: 3px solid #007bff;
+    padding-left: 10px;
+    margin: 10px 0;
+    color: #666;
+}
+
+.output-message ul, .output-message ol {
+    padding-left: 20px;
+}
+
+.output-message h1, .output-message h2, .output-message h3 {
+    margin: 10px 0 5px 0;
+}
+
+.output-message h1 {
+    font-size: 1.5em;
+}
+
+.output-message h2 {
+    font-size: 1.3em;
+}
+
+.output-message h3 {
+    font-size: 1.1em;
+}
+
 .output-user-message {
     align-self: flex-end;
     background-color: #007bff;
     color: white;
     margin-left: auto;
+}
+
+.output-user-message a {
+    color: #cce5ff;
+}
+
+.output-user-message code {
+    background-color: #0056b3;
 }
 
 .output-ai-message {
