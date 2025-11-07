@@ -2,10 +2,14 @@
 const chatTrigger = document.getElementById('chat-trigger');
 const chatContainer = document.getElementById('chat-container');
 const closeChat = document.getElementById('close-chat');
+const clearOutput = document.getElementById('clear-output');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const chatMessages = document.getElementById('chat-messages');
 const presetButtons = document.querySelectorAll('.preset-btn');
+const outputToggle = document.getElementById('output-toggle');
+const pageOutput = document.getElementById('page-output');
+const outputMessages = document.getElementById('output-messages');
 
 // 显示对话框
 chatTrigger.addEventListener('click', () => {
@@ -16,6 +20,23 @@ chatTrigger.addEventListener('click', () => {
 // 隐藏对话框
 closeChat.addEventListener('click', () => {
     chatContainer.classList.add('hidden');
+});
+
+// 清除页面输出内容事件
+clearOutput.addEventListener('click', () => {
+    if (confirm('确定要清除所有对话内容吗？')) {
+        chatMessages.innerHTML = '';
+        outputMessages.innerHTML = '';
+    }
+});
+
+// 开关切换事件
+outputToggle.addEventListener('change', () => {
+    if (outputToggle.checked) {
+        pageOutput.classList.remove('hidden');
+    } else {
+        pageOutput.classList.add('hidden');
+    }
 });
 
 // 发送消息
@@ -52,14 +73,27 @@ function sendMessage() {
 
 // 显示消息
 function displayMessage(message, sender) {
-    const messageElement = document.createElement('div');
-    messageElement.classList.add('message');
-    messageElement.classList.add(sender + '-message');
-    messageElement.textContent = message;
-    chatMessages.appendChild(messageElement);
-    
-    // 滚动到底部
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    // 如果开关打开，只在页面输出区域显示消息
+    if (outputToggle.checked) {
+        const outputMessageElement = document.createElement('div');
+        outputMessageElement.classList.add('output-message');
+        outputMessageElement.classList.add('output-' + sender + '-message');
+        outputMessageElement.textContent = message;
+        outputMessages.appendChild(outputMessageElement);
+        
+        // 滚动到底部
+        outputMessages.scrollTop = outputMessages.scrollHeight;
+    } else {
+        // 如果开关关闭，只在对话框中显示消息
+        const messageElement = document.createElement('div');
+        messageElement.classList.add('message');
+        messageElement.classList.add(sender + '-message');
+        messageElement.textContent = message;
+        chatMessages.appendChild(messageElement);
+        
+        // 滚动到底部
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 }
 
 // 获取AI回复
@@ -81,15 +115,31 @@ async function getAIResponse(userMessage) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        // 移除"正在输入"提示
-        if (typingIndicator && typingIndicator.parentNode) {
-            typingIndicator.parentNode.removeChild(typingIndicator);
+        // 根据开关状态移除相应的"正在输入"提示
+        if (outputToggle.checked) {
+            if (typingIndicator.outputIndicator && typingIndicator.outputIndicator.parentNode) {
+                typingIndicator.outputIndicator.parentNode.removeChild(typingIndicator.outputIndicator);
+            }
+        } else {
+            if (typingIndicator.chatIndicator && typingIndicator.chatIndicator.parentNode) {
+                typingIndicator.chatIndicator.parentNode.removeChild(typingIndicator.chatIndicator);
+            }
         }
         
-        // 创建一个新的AI消息元素用于流式显示
-        const aiMessageElement = document.createElement('div');
-        aiMessageElement.classList.add('message', 'ai-message');
-        chatMessages.appendChild(aiMessageElement);
+        // 根据开关状态决定在哪里创建AI消息元素
+        let aiMessageElement, outputAiMessageElement;
+        
+        if (outputToggle.checked) {
+            // 如果开关打开，只在页面输出区域创建AI消息元素
+            outputAiMessageElement = document.createElement('div');
+            outputAiMessageElement.classList.add('output-message', 'output-ai-message');
+            outputMessages.appendChild(outputAiMessageElement);
+        } else {
+            // 如果开关关闭，只在对话框中创建AI消息元素
+            aiMessageElement = document.createElement('div');
+            aiMessageElement.classList.add('message', 'ai-message');
+            chatMessages.appendChild(aiMessageElement);
+        }
         
         // 处理流式响应
         const reader = response.body.getReader();
@@ -112,7 +162,11 @@ async function getAIResponse(userMessage) {
                         
                         if (data === '[DONE]') {
                             // 滚动到底部
-                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                            if (outputToggle.checked) {
+                                outputMessages.scrollTop = outputMessages.scrollHeight;
+                            } else {
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
                             return;
                         }
                         
@@ -120,16 +174,27 @@ async function getAIResponse(userMessage) {
                             const jsonData = JSON.parse(data);
                             
                             if (jsonData.error) {
-                                aiMessageElement.textContent = jsonData.error;
-                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                                if (outputToggle.checked && outputAiMessageElement) {
+                                    outputAiMessageElement.textContent = jsonData.error;
+                                    outputMessages.scrollTop = outputMessages.scrollHeight;
+                                } else if (aiMessageElement) {
+                                    aiMessageElement.textContent = jsonData.error;
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
                                 return;
                             }
                             
                             if (jsonData.reply) {
                                 aiReply += jsonData.reply;
-                                aiMessageElement.textContent = aiReply;
-                                // 滚动到底部
-                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                                
+                                // 根据开关状态更新相应的消息元素
+                                if (outputToggle.checked && outputAiMessageElement) {
+                                    outputAiMessageElement.textContent = aiReply;
+                                    outputMessages.scrollTop = outputMessages.scrollHeight;
+                                } else if (aiMessageElement) {
+                                    aiMessageElement.textContent = aiReply;
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
                             }
                         } catch (e) {
                             console.error('Error parsing JSON:', e);
@@ -139,10 +204,17 @@ async function getAIResponse(userMessage) {
             }
         }
     } catch (error) {
-        // 移除"正在输入"提示
-        const typingIndicator = chatMessages.querySelector('.message.ai-message');
-        if (typingIndicator && typingIndicator.textContent === '正在输入...') {
-            chatMessages.removeChild(typingIndicator);
+        // 根据开关状态移除相应的"正在输入"提示
+        if (outputToggle.checked) {
+            const outputTypingIndicator = outputMessages.querySelector('.output-ai-message');
+            if (outputTypingIndicator && outputTypingIndicator.textContent === '正在输入...') {
+                outputMessages.removeChild(outputTypingIndicator);
+            }
+        } else {
+            const chatTypingIndicator = chatMessages.querySelector('.message.ai-message');
+            if (chatTypingIndicator && chatTypingIndicator.textContent === '正在输入...') {
+                chatMessages.removeChild(chatTypingIndicator);
+            }
         }
         
         console.error('Error:', error);
@@ -152,10 +224,23 @@ async function getAIResponse(userMessage) {
 
 // 显示"正在输入"提示
 function displayTypingIndicator() {
-    const indicator = document.createElement('div');
-    indicator.classList.add('message', 'ai-message');
-    indicator.textContent = '正在输入...';
-    chatMessages.appendChild(indicator);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-    return indicator;
+    let chatIndicator, outputIndicator;
+    
+    if (outputToggle.checked) {
+        // 如果开关打开，只在页面输出区域显示"正在输入"提示
+        outputIndicator = document.createElement('div');
+        outputIndicator.classList.add('output-message', 'output-ai-message');
+        outputIndicator.textContent = '正在输入...';
+        outputMessages.appendChild(outputIndicator);
+        outputMessages.scrollTop = outputMessages.scrollHeight;
+    } else {
+        // 如果开关关闭，只在对话框中显示"正在输入"提示
+        chatIndicator = document.createElement('div');
+        chatIndicator.classList.add('message', 'ai-message');
+        chatIndicator.textContent = '正在输入...';
+        chatMessages.appendChild(chatIndicator);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    return { chatIndicator: chatIndicator, outputIndicator: outputIndicator };
 }
