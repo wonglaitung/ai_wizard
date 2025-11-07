@@ -16,6 +16,19 @@ const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 const sidebar = document.querySelector('.sidebar');
 const contentArea = document.querySelector('.content-area');
 
+// 设置页面相关元素
+const apiKeyInput = document.getElementById('api-key');
+const baseUrlInput = document.getElementById('base-url');
+const modelNameInput = document.getElementById('model-name');
+const temperatureInput = document.getElementById('temperature');
+const maxTokensInput = document.getElementById('max-tokens');
+const topPInput = document.getElementById('top-p');
+const frequencyPenaltyInput = document.getElementById('frequency-penalty');
+const temperatureValue = document.getElementById('temperature-value');
+const topPValue = document.getElementById('top-p-value');
+const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+const saveSettingsBtn = document.getElementById('save-settings');
+
 // 菜单收起功能
 toggleSidebarBtn.addEventListener('click', () => {
     sidebar.classList.toggle('collapsed');
@@ -102,6 +115,38 @@ if (clearChat) {
     });
 }
 
+// 设置页面功能
+// 更新滑块值显示
+temperatureInput.addEventListener('input', () => {
+    temperatureValue.textContent = temperatureInput.value;
+});
+
+topPInput.addEventListener('input', () => {
+    topPValue.textContent = topPInput.value;
+});
+
+frequencyPenaltyInput.addEventListener('input', () => {
+    frequencyPenaltyValue.textContent = frequencyPenaltyInput.value;
+});
+
+// 保存设置
+saveSettingsBtn.addEventListener('click', () => {
+    const settings = {
+        apiKey: apiKeyInput.value,
+        baseUrl: baseUrlInput.value,
+        modelName: modelNameInput.value,
+        temperature: parseFloat(temperatureInput.value),
+        maxTokens: parseInt(maxTokensInput.value),
+        topP: parseFloat(topPInput.value),
+        frequencyPenalty: parseFloat(frequencyPenaltyInput.value)
+    };
+    
+    // 保存到本地存储
+    localStorage.setItem('aiSettings', JSON.stringify(settings));
+    
+    alert('设置已保存！');
+});
+
 // 开关切换事件
 outputToggle.addEventListener('change', () => {
     if (outputToggle.checked) {
@@ -174,20 +219,38 @@ async function getAIResponse(userMessage) {
         // 显示"正在输入"提示
         let typingIndicator = displayTypingIndicator();
         
+        // 获取保存的设置
+        let settings = {
+            modelName: 'qwen-max',
+            temperature: 0.7,
+            maxTokens: 2048,
+            topP: 0.9,
+            frequencyPenalty: 0.5,
+            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'  // 默认URL
+        };
+        
+        const savedSettings = localStorage.getItem('aiSettings');
+        if (savedSettings) {
+            settings = {...settings, ...JSON.parse(savedSettings)};
+        }
+        
         // 调用后端API
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ message: userMessage })
+            body: JSON.stringify({ 
+                message: userMessage,
+                settings: settings
+            })
         });
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        // 根据开关状态移除相应的"正在输入"提示
+        // 移除"正在输入"提示
         if (outputToggle.checked) {
             if (typingIndicator.outputIndicator && typingIndicator.outputIndicator.parentNode) {
                 typingIndicator.outputIndicator.parentNode.removeChild(typingIndicator.outputIndicator);
@@ -276,7 +339,7 @@ async function getAIResponse(userMessage) {
             }
         }
     } catch (error) {
-        // 根据开关状态移除相应的"正在输入"提示
+        // 移除"正在输入"提示
         if (outputToggle.checked) {
             const outputTypingIndicator = outputMessages.querySelector('.output-ai-message');
             if (outputTypingIndicator && outputTypingIndicator.textContent === '正在输入...') {

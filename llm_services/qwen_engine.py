@@ -4,16 +4,18 @@ import json
 
 # Configuration
 api_key = os.getenv('QWEN_API_KEY', '')  # 从环境变量读取API密钥
-embedding_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"
-chat_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+default_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+embedding_url = f"{default_base_url}/embeddings"
+chat_url = f"{default_base_url}/chat/completions"
 max_tokens = int(os.getenv('MAX_TOKENS', 16384))
 
-def embed_with_llm(query):
+def embed_with_llm(query, base_url=None):
     """
     Generate embeddings for a given query using Qwen's embedding API.
     
     Args:
         query (str): The text to generate embeddings for
+        base_url (str): The base URL for the API. If None, uses default.
         
     Returns:
         dict: The embedding vector data
@@ -25,6 +27,10 @@ def embed_with_llm(query):
         # 检查 API 密钥是否设置
         if not api_key:
             raise ValueError("QWEN_API_KEY 环境变量未设置")
+        
+        # 使用传入的base_url或默认URL
+        if base_url is None:
+            base_url = default_base_url
         
         headers = {
             'Authorization': f'Bearer {api_key}'
@@ -39,7 +45,9 @@ def embed_with_llm(query):
             'input': query
         }
         
-        response = requests.post(embedding_url, headers=headers, json=payload)
+        # 构建完整的API URL
+        api_url = f"{base_url}/embeddings"
+        response = requests.post(api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for bad status codes
         
         return response.json()['data'][0]  # Return the embedding vector
@@ -47,12 +55,19 @@ def embed_with_llm(query):
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
-def chat_with_llm_stream(query, enable_thinking=True):
+def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True):
     """
     Generate a streaming response from Qwen model for a given query.
     
     Args:
         query (str): The user's query
+        model (str): The model name to use. Default is 'qwen-max'.
+        temperature (float): Controls randomness in output. Default is 0.7.
+        max_tokens (int): Maximum number of tokens to generate. Default is 2048.
+        top_p (float): Controls diversity of output. Default is 0.9.
+        frequency_penalty (float): Controls repetition. Default is 0.5.
+        api_key (str): API key for authentication. If None, uses environment variable. Default is None.
+        base_url (str): The base URL for the API. If None, uses default.
         enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is True.
         
     Yields:
@@ -63,9 +78,16 @@ def chat_with_llm_stream(query, enable_thinking=True):
     """
     try:
         # 检查 API 密钥是否设置
-        if not api_key:
-            raise ValueError("QWEN_API_KEY 环境变量未设置")
+        if api_key is None:
+            api_key = os.getenv('QWEN_API_KEY', '')
         
+        if not api_key:
+            raise ValueError("未提供API密钥")
+        
+        # 使用传入的base_url或默认URL
+        if base_url is None:
+            base_url = default_base_url
+            
         headers = {
             'Authorization': f'Bearer {api_key}'
         }
@@ -75,17 +97,20 @@ def chat_with_llm_stream(query, enable_thinking=True):
             query = query.encode('utf-8').decode('utf-8')
         
         payload = {
-            'model': 'qwen-plus-2025-07-28',
+            'model': model,
             'messages': [{'role': 'user', 'content': query}],
             'stream': True,
-            'top_p': 0.2,
-            'temperature': 0.05,
+            'top_p': top_p,
+            'temperature': temperature,
             'max_tokens': max_tokens,
+            'frequency_penalty': frequency_penalty,
             'seed': 1368,
             'enable_thinking': enable_thinking  # 使用传入的参数
         }
         
-        response = requests.post(chat_url, headers=headers, json=payload, stream=True)
+        # 构建完整的API URL
+        api_url = f"{base_url}/chat/completions"
+        response = requests.post(api_url, headers=headers, json=payload, stream=True)
         response.raise_for_status()  # Raise an exception for bad status codes
         
         # 处理流式响应
@@ -108,12 +133,19 @@ def chat_with_llm_stream(query, enable_thinking=True):
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
-def chat_with_llm(query, enable_thinking=True):
+def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True):
     """
     Generate a response from Qwen model for a given query.
     
     Args:
         query (str): The user's query
+        model (str): The model name to use. Default is 'qwen-max'.
+        temperature (float): Controls randomness in output. Default is 0.7.
+        max_tokens (int): Maximum number of tokens to generate. Default is 2048.
+        top_p (float): Controls diversity of output. Default is 0.9.
+        frequency_penalty (float): Controls repetition. Default is 0.5.
+        api_key (str): API key for authentication. If None, uses environment variable. Default is None.
+        base_url (str): The base URL for the API. If None, uses default.
         enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is True.
         
     Returns:
@@ -124,9 +156,16 @@ def chat_with_llm(query, enable_thinking=True):
     """
     try:
         # 检查 API 密钥是否设置
-        if not api_key:
-            raise ValueError("QWEN_API_KEY 环境变量未设置")
+        if api_key is None:
+            api_key = os.getenv('QWEN_API_KEY', '')
         
+        if not api_key:
+            raise ValueError("未提供API密钥")
+        
+        # 使用传入的base_url或默认URL
+        if base_url is None:
+            base_url = default_base_url
+            
         headers = {
             'Authorization': f'Bearer {api_key}'
         }
@@ -136,17 +175,20 @@ def chat_with_llm(query, enable_thinking=True):
             query = query.encode('utf-8').decode('utf-8')
         
         payload = {
-            'model': 'qwen-plus-2025-07-28',
+            'model': model,
             'messages': [{'role': 'user', 'content': query}],
             'stream': False,
-            'top_p': 0.2,
-            'temperature': 0.05,
+            'top_p': top_p,
+            'temperature': temperature,
             'max_tokens': max_tokens,
+            'frequency_penalty': frequency_penalty,
             'seed': 1368,
             'enable_thinking': enable_thinking  # 使用传入的参数
         }
         
-        response = requests.post(chat_url, headers=headers, json=payload)
+        # 构建完整的API URL
+        api_url = f"{base_url}/chat/completions"
+        response = requests.post(api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for bad status codes
         
         return response.json()['choices'][0]['message']['content']  # Return the response text
