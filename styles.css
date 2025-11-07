@@ -19,7 +19,7 @@ body {
     align-items: center;
     cursor: pointer;
     box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    z-index: 1000;
+    z-index: 1003; /* 确保触发按钮在所有元素之上 */
 }
 
 .chat-trigger span {
@@ -39,7 +39,7 @@ body {
     box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     display: flex;
     flex-direction: column;
-    z-index: 1001;
+    z-index: 1002; /* 提高z-index，确保对话框在页面输出区域之上 */
     resize: both;
     overflow: hidden;
 }
@@ -61,12 +61,84 @@ body {
     align-items: center;
 }
 
+.chat-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .close-btn {
     background: none;
     border: none;
     color: white;
     font-size: 24px;
     cursor: pointer;
+}
+
+.clear-btn {
+    background: none;
+    border: 1px solid white;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-right: 10px;
+}
+
+.clear-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 开关样式 */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 20px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #4CAF50;
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-size: 14px;
+    margin-right: 5px;
 }
 
 /* 消息区域 */
@@ -153,4 +225,74 @@ body {
 
 .preset-btn:hover {
     background-color: #e9ecef;
+}
+
+/* 页面输出区域 */
+.page-output {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    right: 440px; /* 留出对话框的空间 */
+    height: calc(100% - 140px); /* 考虑顶部和底部的空间 */
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 1000; /* 降低z-index，避免挡住对话框 */
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.output-header h2 {
+    margin: 0;
+    color: #333;
+}
+
+.page-output .clear-btn {
+    background: none;
+    border: 1px solid #ccc;
+    color: #666;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.page-output .clear-btn:hover {
+    background-color: #f0f0f0;
+}
+
+.output-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.output-message {
+    padding: 10px 15px;
+    border-radius: 18px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.output-user-message {
+    align-self: flex-end;
+    background-color: #007bff;
+    color: white;
+    margin-left: auto;
+}
+
+.output-ai-message {
+    align-self: flex-start;
+    background-color: #e9ecef;
+    color: #333;
+    margin-right: auto;
 }

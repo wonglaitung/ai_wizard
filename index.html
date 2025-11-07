@@ -16,7 +16,14 @@
     <div id="chat-container" class="chat-container hidden">
         <div class="chat-header">
             <span>AI 对话</span>
-            <button id="close-chat" class="close-btn">&times;</button>
+            <div class="chat-controls">
+                <label class="switch">
+                    <input type="checkbox" id="output-toggle">
+                    <span class="slider"></span>
+                </label>
+                <span class="toggle-label">页面输出</span>
+                <button id="close-chat" class="close-btn">&times;</button>
+            </div>
         </div>
         <div id="chat-messages" class="chat-messages"></div>
         <div class="chat-input-container">
@@ -28,6 +35,15 @@
             <button class="preset-btn" data-question="你能做什么">你能做什么</button>
             <button class="preset-btn" data-question="你是谁">你是谁</button>
         </div>
+    </div>
+
+    <!-- 页面输出区域 -->
+    <div id="page-output" class="page-output hidden">
+        <div class="output-header">
+            <h2>对话记录</h2>
+            <button id="clear-output" class="clear-btn">清除</button>
+        </div>
+        <div id="output-messages" class="output-messages"></div>
     </div>
 
     <script src="script.js"></script>
