@@ -10,6 +10,7 @@
 - **配置页面**：支持配置API密钥、基础URL、模型名称等参数。
 - **参数调节**：可调节Temperature、Top-P、最大Token数等模型参数。
 - **实时交互**：支持用户输入消息并获取 AI 回复。
+- **Markdown 支持**：对话框和对话区域支持 Markdown 格式渲染。
 
 ## 技术栈
 
@@ -55,9 +56,13 @@ python app.py
 .
 ├── app.py                 # Flask 后端应用
 ├── main.html              # 前端主页面
+├── chat.html              # 前端聊天页面
 ├── settings.html          # 前端设置页面
-├── styles.css             # 前端样式表
-├── script.js              # 前端 JavaScript 逻辑
+├── css/                   # CSS样式文件目录
+│   └── styles.css         # 前端样式表
+├── scripts/               # JavaScript文件目录
+│   ├── marked.min.js      # Markdown解析库
+│   └── script.js          # 前端 JavaScript 逻辑
 ├── llm_services/          # LLM 服务模块
 │   └── qwen_engine.py     # Qwen 模型接口
 └── set_key.sh             # 环境变量设置脚本

@@ -292,7 +292,14 @@ function displayMessage(message, sender) {
         const outputMessageElement = document.createElement('div');
         outputMessageElement.classList.add('output-message');
         outputMessageElement.classList.add('output-' + sender + '-message');
-        outputMessageElement.textContent = message;
+        
+        // 使用marked.js渲染Markdown
+        if (typeof marked !== 'undefined') {
+            outputMessageElement.innerHTML = marked.parse(message);
+        } else {
+            outputMessageElement.textContent = message;
+        }
+        
         outputMessages.appendChild(outputMessageElement);
         
         // 滚动到底部
@@ -302,7 +309,14 @@ function displayMessage(message, sender) {
         const messageElement = document.createElement('div');
         messageElement.classList.add('message');
         messageElement.classList.add(sender + '-message');
-        messageElement.textContent = message;
+        
+        // 使用marked.js渲染Markdown
+        if (typeof marked !== 'undefined') {
+            messageElement.innerHTML = marked.parse(message);
+        } else {
+            messageElement.textContent = message;
+        }
+        
         chatMessages.appendChild(messageElement);
         
         // 滚动到底部
@@ -407,10 +421,18 @@ async function getAIResponse(userMessage) {
                             
                             if (jsonData.error) {
                                 if (outputToggle.checked && outputAiMessageElement) {
-                                    outputAiMessageElement.textContent = jsonData.error;
+                                    if (typeof marked !== 'undefined') {
+                                        outputAiMessageElement.innerHTML = marked.parse(jsonData.error);
+                                    } else {
+                                        outputAiMessageElement.textContent = jsonData.error;
+                                    }
                                     outputMessages.scrollTop = outputMessages.scrollHeight;
                                 } else if (aiMessageElement) {
-                                    aiMessageElement.textContent = jsonData.error;
+                                    if (typeof marked !== 'undefined') {
+                                        aiMessageElement.innerHTML = marked.parse(jsonData.error);
+                                    } else {
+                                        aiMessageElement.textContent = jsonData.error;
+                                    }
                                     chatMessages.scrollTop = chatMessages.scrollHeight;
                                 }
                                 return;
@@ -421,10 +443,18 @@ async function getAIResponse(userMessage) {
                                 
                                 // 根据开关状态更新相应的消息元素
                                 if (outputToggle.checked && outputAiMessageElement) {
-                                    outputAiMessageElement.textContent = aiReply;
+                                    if (typeof marked !== 'undefined') {
+                                        outputAiMessageElement.innerHTML = marked.parse(aiReply);
+                                    } else {
+                                        outputAiMessageElement.textContent = aiReply;
+                                    }
                                     outputMessages.scrollTop = outputMessages.scrollHeight;
                                 } else if (aiMessageElement) {
-                                    aiMessageElement.textContent = aiReply;
+                                    if (typeof marked !== 'undefined') {
+                                        aiMessageElement.innerHTML = marked.parse(aiReply);
+                                    } else {
+                                        aiMessageElement.textContent = aiReply;
+                                    }
                                     chatMessages.scrollTop = chatMessages.scrollHeight;
                                 }
                             }
