@@ -55,7 +55,7 @@ def embed_with_llm(query, base_url=None):
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
-def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True):
+def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
     """
     Generate a streaming response from Qwen model for a given query.
     
@@ -69,6 +69,7 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=20
         api_key (str): API key for authentication. If None, uses environment variable. Default is None.
         base_url (str): The base URL for the API. If None, uses default.
         enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is True.
+        history (list): Chat history containing previous messages. Default is None.
         
     Yields:
         str: Chunks of the model's response text
@@ -96,9 +97,28 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=20
         if isinstance(query, str):
             query = query.encode('utf-8').decode('utf-8')
         
+        # 准备消息列表，包含历史记录和当前查询
+        messages = []
+        
+        # 添加历史记录到消息列表
+        if history:
+            for msg in history:
+                # 将历史记录中的 'user' 和 'ai' 角色转换为 'user' 和 'assistant'
+                role = 'user' if msg['role'] == 'user' else 'assistant'
+                messages.append({
+                    'role': role,
+                    'content': msg['content']
+                })
+        
+        # 添加当前查询
+        messages.append({
+            'role': 'user',
+            'content': query
+        })
+        
         payload = {
             'model': model,
-            'messages': [{'role': 'user', 'content': query}],
+            'messages': messages,
             'stream': True,
             'top_p': top_p,
             'temperature': temperature,
@@ -133,7 +153,7 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=20
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
-def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True):
+def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
     """
     Generate a response from Qwen model for a given query.
     
@@ -147,6 +167,7 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top
         api_key (str): API key for authentication. If None, uses environment variable. Default is None.
         base_url (str): The base URL for the API. If None, uses default.
         enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is True.
+        history (list): Chat history containing previous messages. Default is None.
         
     Returns:
         str: The model's response text
@@ -174,9 +195,28 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top
         if isinstance(query, str):
             query = query.encode('utf-8').decode('utf-8')
         
+        # 准备消息列表，包含历史记录和当前查询
+        messages = []
+        
+        # 添加历史记录到消息列表
+        if history:
+            for msg in history:
+                # 将历史记录中的 'user' 和 'ai' 角色转换为 'user' 和 'assistant'
+                role = 'user' if msg['role'] == 'user' else 'assistant'
+                messages.append({
+                    'role': role,
+                    'content': msg['content']
+                })
+        
+        # 添加当前查询
+        messages.append({
+            'role': 'user',
+            'content': query
+        })
+        
         payload = {
             'model': model,
-            'messages': [{'role': 'user', 'content': query}],
+            'messages': messages,
             'stream': False,
             'top_p': top_p,
             'temperature': temperature,

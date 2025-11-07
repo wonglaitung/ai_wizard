@@ -19,6 +19,9 @@ const contentArea = document.querySelector('.content-area');
 // 设置页面相关元素 - 在需要时再获取
 let apiKeyInput, baseUrlInput, modelNameInput, temperatureInput, maxTokensInput, topPInput, frequencyPenaltyInput, temperatureValue, topPValue, frequencyPenaltyValue, saveSettingsBtn;
 
+// 聊天历史记录
+let chatHistory = [];
+
 // 菜单收起功能
 toggleSidebarBtn.addEventListener('click', () => {
     sidebar.classList.toggle('collapsed');
@@ -237,6 +240,9 @@ if (clearChat) {
             if (outputMessages) {
                 outputMessages.innerHTML = '';
             }
+            
+            // 清除聊天历史记录
+            chatHistory = [];
         }
     });
 }
@@ -287,6 +293,9 @@ function sendMessage() {
 
 // 显示消息
 function displayMessage(message, sender) {
+    // 将消息添加到聊天历史记录
+    chatHistory.push({ role: sender, content: message });
+    
     // 如果开关打开，只在页面输出区域显示消息
     if (outputToggle.checked) {
         const outputMessageElement = document.createElement('div');
@@ -353,6 +362,7 @@ async function getAIResponse(userMessage) {
             },
             body: JSON.stringify({ 
                 message: userMessage,
+                history: chatHistory,
                 settings: settings
             })
         });
