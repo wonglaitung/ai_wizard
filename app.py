@@ -42,6 +42,7 @@ def chat():
     try:
         data = request.json
         user_message = data.get('message', '')
+        chat_history = data.get('history', [])
         settings = data.get('settings', {})
         
         if not user_message:
@@ -58,7 +59,8 @@ def chat():
             'top_p': settings.get('topP', 0.9),
             'frequency_penalty': settings.get('frequencyPenalty', 0.5),
             'api_key': settings.get('apiKey', None),  # 添加API密钥参数
-            'base_url': settings.get('baseUrl', None)  # 添加基础URL参数
+            'base_url': settings.get('baseUrl', None),  # 添加基础URL参数
+            'history': chat_history  # 添加聊天历史记录参数
         }
         
         # 调用Qwen模型获取流式回复
