@@ -38,6 +38,7 @@ def chat():
     try:
         data = request.json
         user_message = data.get('message', '')
+        settings = data.get('settings', {})
         
         if not user_message:
             def error_generator():
@@ -45,10 +46,21 @@ def chat():
             
             return Response(error_generator(), mimetype='text/event-stream')
         
+        # 准备传递给模型的参数
+        model_params = {
+            'model': settings.get('modelName', 'qwen-max'),
+            'temperature': settings.get('temperature', 0.7),
+            'max_tokens': settings.get('maxTokens', 2048),
+            'top_p': settings.get('topP', 0.9),
+            'frequency_penalty': settings.get('frequencyPenalty', 0.5),
+            'api_key': settings.get('apiKey', None),  # 添加API密钥参数
+            'base_url': settings.get('baseUrl', None)  # 添加基础URL参数
+        }
+        
         # 调用Qwen模型获取流式回复
         def generate():
             try:
-                for chunk in chat_with_llm_stream(user_message):
+                for chunk in chat_with_llm_stream(user_message, **model_params):
                     if chunk:
                         yield 'data: ' + json.dumps({'reply': chunk}) + '\n\n'
                 # 发送结束信号

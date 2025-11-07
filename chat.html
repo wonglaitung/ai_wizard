@@ -13,7 +13,7 @@
     </div>
 
     <!-- 对话框 -->
-    <div id="chat-container" class="chat-container hidden">
+    <div id="chat-container" class="chat-container">
         <div class="chat-header">
             <span>AI 对话</span>
             <div class="chat-controls">
@@ -66,6 +66,9 @@
                     }
                 `;
                 document.head.appendChild(style);
+                
+                // 确保对话框是可见的
+                chatContainer.classList.remove('hidden');
             }
         });
     </script>
