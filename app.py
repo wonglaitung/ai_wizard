@@ -17,7 +17,11 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory('.', 'main.html')
+
+@app.route('/chat')
+def chat_page():
+    return send_from_directory('.', 'chat.html')
 
 @app.route('/<path:filename>')
 def static_files(filename):

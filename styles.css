@@ -3,6 +3,160 @@ body {
     margin: 0;
     padding: 0;
     background-color: #f0f0f0;
+    overflow: hidden; /* 防止出现双滚动条 */
+}
+
+/* 主容器布局 */
+.main-container {
+    display: flex;
+    height: 100vh;
+}
+
+/* 左侧菜单 */
+.sidebar {
+    width: 250px;
+    background-color: #2c3e50;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: relative;
+    z-index: 1005;
+    transition: width 0.3s ease;
+}
+
+.sidebar.collapsed {
+    width: 60px;
+}
+
+.menu-header {
+    padding: 20px;
+    border-bottom: 1px solid #34495e;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.menu-header h2 {
+    margin: 0;
+    font-size: 1.5em;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar.collapsed .menu-header h2 {
+    opacity: 0;
+    width: 0;
+}
+
+.toggle-sidebar-btn {
+    background: none;
+    border: 1px solid white;
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    transition: transform 0.3s ease;
+}
+
+.toggle-sidebar-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.menu-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1;
+}
+
+.menu-item {
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    border-left: 3px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.menu-item:hover {
+    background-color: #34495e;
+}
+
+.menu-item.active {
+    background-color: #34495e;
+    border-left: 3px solid #3498db;
+}
+
+.sidebar.collapsed .menu-item span:last-child {
+    display: none;
+}
+
+.sidebar.collapsed .menu-item {
+    justify-content: center;
+    padding: 15px 0;
+}
+
+/* 右侧内容区域 */
+.content-area {
+    flex: 1;
+    position: relative;
+    overflow: auto;
+    background-color: #f0f0f0;
+    height: 100vh;
+    transition: margin-left 0.3s ease;
+}
+
+.content-area.sidebar-collapsed {
+    margin-left: 60px;
+}
+
+.page {
+    display: none;
+    height: 100%;
+}
+
+.page.active {
+    display: block;
+}
+
+.page-content {
+    padding: 20px;
+}
+
+/* 页面输出区域 */
+.page-output {
+    position: fixed;
+    top: 20px;
+    left: 270px; /* 调整左边距，为展开的菜单留出空间 (250px菜单 + 20px边距) */
+    right: 440px; /* 留出对话框的空间 */
+    height: calc(100% - 140px); /* 考虑顶部和底部的空间 */
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 1000; /* 降低z-index，避免挡住对话框 */
+    padding: 20px;
+    overflow-y: auto;
+    resize: vertical; /* 允许垂直调整大小 */
+    min-height: 200px; /* 设置最小高度 */
+}
+
+/* 主页面中的页面输出区域 - 菜单展开时 */
+.main-container .page-output {
+    left: 270px !important; /* 菜单展开时，页面输出区域的左边距 */
+    right: 440px !important; /* 确保页面输出区域不会被对话框挡住 */
+}
+
+/* 主页面中的页面输出区域 - 菜单收起时 */
+.main-container .sidebar.collapsed ~ .content-area .page-output {
+    left: 80px !important; /* 菜单收起时，页面输出区域的左边距 */
 }
 
 /* 对话框触发按钮 */
@@ -231,7 +385,7 @@ input:checked + .slider:before {
 .page-output {
     position: fixed;
     top: 20px;
-    left: 20px;
+    left: 270px; /* 调整左边距，为展开的菜单留出空间 (250px菜单 + 20px边距) */
     right: 440px; /* 留出对话框的空间 */
     height: calc(100% - 140px); /* 考虑顶部和底部的空间 */
     background-color: white;
@@ -241,14 +395,6 @@ input:checked + .slider:before {
     z-index: 1000; /* 降低z-index，避免挡住对话框 */
     padding: 20px;
     overflow-y: auto;
-}
-
-.output-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 0;
-    margin-bottom: 15px;
 }
 
 .output-header h2 {
