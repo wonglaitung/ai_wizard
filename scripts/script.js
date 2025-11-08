@@ -16,8 +16,7 @@ const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 const sidebar = document.querySelector('.sidebar');
 const contentArea = document.querySelector('.content-area');
 
-// 设置页面相关元素 - 在需要时再获取
-let apiKeyInput, baseUrlInput, modelNameInput, temperatureInput, maxTokensInput, topPInput, frequencyPenaltyInput, temperatureValue, topPValue, frequencyPenaltyValue, saveSettingsBtn;
+
 
 // 聊天历史记录
 let chatHistory = [];
@@ -42,6 +41,8 @@ toggleSidebarBtn.addEventListener('click', () => {
 if (menuItems && pages) {
     menuItems.forEach(item => {
         item.addEventListener('click', () => {
+            console.log('菜单项被点击:', item.getAttribute('data-page'));
+            
             // 如果菜单是收起状态，点击菜单项时展开菜单
             if (sidebar && sidebar.classList.contains('collapsed')) {
                 sidebar.classList.remove('collapsed');
@@ -61,157 +62,47 @@ if (menuItems && pages) {
             
             // 显示对应页面
             const pageId = item.getAttribute('data-page') + '-page';
+            console.log('目标页面ID:', pageId);
             const targetPage = document.getElementById(pageId);
             if (targetPage) {
+                console.log('找到目标页面:', targetPage);
                 targetPage.classList.add('active');
+                console.log('页面已激活:', targetPage.classList.contains('active'));
                 
-                // 如果是设置页面，加载设置内容
-                if (item.getAttribute('data-page') === 'settings') {
-                    loadSettingsPage(targetPage);
+                // 如果是其他页面，确保显示图表输出区域的开关
+                if (outputToggle) {
+                    // 不改变开关状态，让用户可以控制
                 }
+            } else {
+                console.log('未找到目标页面:', pageId);
             }
         });
     });
 }
 
-// 加载设置页面内容
-async function loadSettingsPage(pageElement) {
-    try {
-        const response = await fetch('/settings');
-        if (response.ok) {
-            const htmlContent = await response.text();
-            // 提取body中的内容
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(htmlContent, 'text/html');
-            const settingsContent = doc.querySelector('.settings-page .page-content');
-            
-            if (settingsContent) {
-                // 将设置页面内容插入到目标页面中
-                const targetContentArea = pageElement.querySelector('.page-content');
-                targetContentArea.innerHTML = settingsContent.innerHTML;
-                
-                // 重新初始化设置页面的功能
-                initializeSettingsPageFunctions();
-            }
-        }
-    } catch (error) {
-        console.error('加载设置页面失败:', error);
-        const targetContentArea = pageElement.querySelector('.page-content');
-        targetContentArea.innerHTML = '<p>加载设置页面失败，请稍后重试。</p>';
-    }
-}
 
-// 初始化设置页面功能
-function initializeSettingsPageFunctions() {
-    // 使用 setTimeout 确保DOM已完全加载
-    setTimeout(() => {
-        // 检查是否在设置页面
-        const isSettingsPage = document.getElementById('settings-page') !== null;
-        // 如果不在设置页面，直接返回
-        if (!isSettingsPage) {
-            // 检查是否在主页面且当前激活的是设置页面
-            const activeMenuItem = document.querySelector('.menu-item.active');
-            if (!activeMenuItem || activeMenuItem.getAttribute('data-page') !== 'settings') {
-                return;
-            }
-        }
-        
-        // 获取设置页面相关元素
-        const baseUrlInput = document.getElementById('base-url');
-        const apiKeyInput = document.getElementById('api-key');
-        const modelNameInput = document.getElementById('model-name');
-        const temperatureInput = document.getElementById('temperature');
-        const maxTokensInput = document.getElementById('max-tokens');
-        const topPInput = document.getElementById('top-p');
-        const frequencyPenaltyInput = document.getElementById('frequency-penalty');
-        const temperatureValue = document.getElementById('temperature-value');
-        const topPValue = document.getElementById('top-p-value');
-        const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
-        const saveSettingsBtn = document.getElementById('save-settings');
-
-        // 如果元素存在，则初始化功能
-        if (baseUrlInput && apiKeyInput && modelNameInput && temperatureInput && 
-            maxTokensInput && topPInput && frequencyPenaltyInput && temperatureValue && 
-            topPValue && frequencyPenaltyValue && saveSettingsBtn) {
-            
-            // 从本地存储加载已保存的设置
-            const savedSettings = localStorage.getItem('aiSettings');
-            if (savedSettings) {
-                const settings = JSON.parse(savedSettings);
-                if (settings.baseUrl) baseUrlInput.value = settings.baseUrl;
-                if (settings.apiKey) apiKeyInput.value = settings.apiKey;
-                if (settings.modelName) modelNameInput.value = settings.modelName;
-                if (settings.temperature !== undefined) {
-                    temperatureInput.value = settings.temperature;
-                    temperatureValue.textContent = settings.temperature;
-                }
-                if (settings.maxTokens !== undefined) maxTokensInput.value = settings.maxTokens;
-                if (settings.topP !== undefined) {
-                    topPInput.value = settings.topP;
-                    topPValue.textContent = settings.topP;
-                }
-                if (settings.frequencyPenalty !== undefined) {
-                    frequencyPenaltyInput.value = settings.frequencyPenalty;
-                    frequencyPenaltyValue.textContent = settings.frequencyPenalty;
-                }
-            }
-            
-            // 移除之前的事件监听器（如果存在）
-            // 创建新的事件处理函数
-            function updateTemperatureValue() {
-                temperatureValue.textContent = temperatureInput.value;
-            }
-            
-            function updateTopPValue() {
-                topPValue.textContent = topPInput.value;
-            }
-            
-            function updateFrequencyPenaltyValue() {
-                frequencyPenaltyValue.textContent = frequencyPenaltyInput.value;
-            }
-            
-            function handleSaveSettings() {
-                const settings = {
-                    baseUrl: baseUrlInput.value,
-                    apiKey: apiKeyInput.value,
-                    modelName: modelNameInput.value,
-                    temperature: parseFloat(temperatureInput.value),
-                    maxTokens: parseInt(maxTokensInput.value),
-                    topP: parseFloat(topPInput.value),
-                    frequencyPenalty: parseFloat(frequencyPenaltyInput.value)
-                };
-                
-                // 保存到本地存储
-                localStorage.setItem('aiSettings', JSON.stringify(settings));
-                
-                alert('设置已保存！');
-            }
-            
-            // 添加事件监听器
-            temperatureInput.removeEventListener('input', updateTemperatureValue);
-            temperatureInput.addEventListener('input', updateTemperatureValue);
-
-            topPInput.removeEventListener('input', updateTopPValue);
-            topPInput.addEventListener('input', updateTopPValue);
-
-            frequencyPenaltyInput.removeEventListener('input', updateFrequencyPenaltyValue);
-            frequencyPenaltyInput.addEventListener('input', updateFrequencyPenaltyValue);
-
-            saveSettingsBtn.removeEventListener('click', handleSaveSettings);
-            saveSettingsBtn.addEventListener('click', handleSaveSettings);
-        }
-    }, 100); // 延迟100毫秒确保内容已加载
-}
 
 // 调整图表输出区域位置的函数
 function adjustPageOutputPosition() {
     if (pageOutput) {
+        // 保存当前的宽度和高度（如果用户已经调整过）
+        const currentWidth = pageOutput.style.width;
+        const currentHeight = pageOutput.style.height;
+        
         if (sidebar.classList.contains('collapsed')) {
             // 菜单收起时，图表输出区域左边距减少
             pageOutput.style.left = '80px';
         } else {
             // 菜单展开时，图表输出区域左边距增加
             pageOutput.style.left = '270px';
+        }
+        
+        // 恢复用户调整的宽度和高度（如果有的话）
+        if (currentWidth) {
+            pageOutput.style.width = currentWidth;
+        }
+        if (currentHeight) {
+            pageOutput.style.height = currentHeight;
         }
     }
 }
@@ -247,15 +138,15 @@ if (clearChat) {
     });
 }
 
-// 设置页面功能 - 只在设置页面中初始化
-// 这些功能现在在 initializeSettingsPageFunctions 函数中处理
-
 // 开关切换事件
 outputToggle.addEventListener('change', () => {
+    console.log('输出开关状态改变:', outputToggle.checked);
     if (outputToggle.checked) {
         pageOutput.classList.remove('hidden');
+        console.log('图表输出区域已显示');
     } else {
         pageOutput.classList.add('hidden');
+        console.log('图表输出区域已隐藏');
     }
 });
 
@@ -293,11 +184,13 @@ function sendMessage() {
 
 // 显示消息
 function displayMessage(message, sender) {
+    console.log('显示消息:', message, '发送者:', sender);
     // 将消息添加到聊天历史记录
     chatHistory.push({ role: sender, content: message });
     
     // 如果开关打开，只在图表输出区域显示消息
     if (outputToggle.checked) {
+        console.log('在图表输出区域显示消息');
         const outputMessageElement = document.createElement('div');
         outputMessageElement.classList.add('output-message');
         outputMessageElement.classList.add('output-' + sender + '-message');
@@ -314,6 +207,7 @@ function displayMessage(message, sender) {
         // 滚动到底部
         outputMessages.scrollTop = outputMessages.scrollHeight;
     } else {
+        console.log('在对话框中显示消息');
         // 如果开关关闭，只在对话框中显示消息
         const messageElement = document.createElement('div');
         messageElement.classList.add('message');
@@ -427,9 +321,11 @@ async function getAIResponse(userMessage) {
                             } else {
                                 chatMessages.scrollTop = chatMessages.scrollHeight;
                             }
-                            // 检查是否包含表格，如果是，只在图表输出区域绘制图表
+                            // 检查是否包含表格，如果是，尝试绘制图表
                             if (outputToggle.checked && outputAiMessageElement) {
                                 checkAndRenderChart(outputAiMessageElement);
+                            } else if (aiMessageElement) {
+                                checkAndRenderChart(aiMessageElement);
                             }
                             return;
                         }
@@ -512,51 +408,51 @@ function checkAndRenderChart(messageElement) {
         // 解析表格数据
         const tableData = parseTableData(tableElement);
         if (tableData) {
-                    // 创建图表包装容器
-        const chartWrapper = document.createElement('div');
-        chartWrapper.className = 'chart-wrapper';
-        chartWrapper.style.width = '100%';
-        chartWrapper.style.marginTop = '20px';
-        
-        // 创建图表类型选择控件
-        const chartControls = document.createElement('div');
-        chartControls.className = 'chart-controls';
-        chartControls.innerHTML = `
-            <label for="chart-type-${index}">图表类型: </label>
-            <select id="chart-type-${index}" class="chart-type-selector">
-                <option value="bar">柱状图</option>
-                <option value="line">折线图</option>
-                <option value="pie">饼图</option>
-                <option value="doughnut">环形图</option>
-            </select>
-        `;
-        chartWrapper.appendChild(chartControls);
-        
-        // 创建图表容器
-        const chartContainer = document.createElement('div');
-        chartContainer.className = 'chart-container';
-        chartContainer.style.width = '100%';
-        chartContainer.style.height = '400px';
-        
-        // 创建canvas元素用于图表
-        const canvas = document.createElement('canvas');
-        canvas.id = 'chart-' + Date.now() + '-' + index; // 使用时间戳和索引确保唯一ID
-        canvas.className = 'chart-canvas';
-        chartContainer.appendChild(canvas);
-        chartWrapper.appendChild(chartContainer);
-        
-        // 将图表包装容器插入到表格之后
-        tableElement.parentNode.insertBefore(chartWrapper, tableElement.nextSibling);
-        
-        // 渲染图表
-        renderChart(canvas, tableData, 'bar');
-        
-        // 添加图表类型切换事件监听器
-        const chartTypeSelector = chartControls.querySelector('.chart-type-selector');
-        chartTypeSelector.addEventListener('change', function() {
-            const selectedType = this.value;
-            renderChart(canvas, tableData, selectedType);
-        });
+            // 创建图表包装容器
+            const chartWrapper = document.createElement('div');
+            chartWrapper.className = 'chart-wrapper';
+            chartWrapper.style.width = '100%';
+            chartWrapper.style.marginTop = '20px';
+            
+            // 创建图表类型选择控件
+            const chartControls = document.createElement('div');
+            chartControls.className = 'chart-controls';
+            chartControls.innerHTML = `
+                <label for="chart-type-${index}">图表类型: </label>
+                <select id="chart-type-${index}" class="chart-type-selector">
+                    <option value="bar">柱状图</option>
+                    <option value="line">折线图</option>
+                    <option value="pie">饼图</option>
+                    <option value="doughnut">环形图</option>
+                </select>
+            `;
+            chartWrapper.appendChild(chartControls);
+            
+            // 创建图表容器
+            const chartContainer = document.createElement('div');
+            chartContainer.className = 'chart-container';
+            chartContainer.style.width = '100%';
+            chartContainer.style.height = '400px';
+            
+            // 创建canvas元素用于图表
+            const canvas = document.createElement('canvas');
+            canvas.id = 'chart-' + Date.now() + '-' + index; // 使用时间戳和索引确保唯一ID
+            canvas.className = 'chart-canvas';
+            chartContainer.appendChild(canvas);
+            chartWrapper.appendChild(chartContainer);
+            
+            // 将图表包装容器插入到表格之后
+            tableElement.parentNode.insertBefore(chartWrapper, tableElement.nextSibling);
+            
+            // 渲染图表
+            renderChart(canvas, tableData, 'bar');
+            
+            // 添加图表类型切换事件监听器
+            const chartTypeSelector = chartControls.querySelector('.chart-type-selector');
+            chartTypeSelector.addEventListener('change', function() {
+                const selectedType = this.value;
+                renderChart(canvas, tableData, selectedType);
+            });
         }
     });
 }
@@ -742,7 +638,6 @@ function displayTypingIndicator() {
         // 如果开关关闭，只在对话框中显示"正在输入"提示
         chatIndicator = document.createElement('div');
         chatIndicator.classList.add('message', 'ai-message');
-        chatIndicator.textContent = '正在输入...';
         chatMessages.appendChild(chatIndicator);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
