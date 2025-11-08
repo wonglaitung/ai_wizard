@@ -512,23 +512,51 @@ function checkAndRenderChart(messageElement) {
         // 解析表格数据
         const tableData = parseTableData(tableElement);
         if (tableData) {
-            // 在表格下方添加图表容器
-            const chartContainer = document.createElement('div');
-            chartContainer.className = 'chart-container';
-            chartContainer.style.width = '100%';
-            chartContainer.style.height = '400px';
-            chartContainer.style.marginTop = '20px';
-            
-            // 创建canvas元素用于图表
-            const canvas = document.createElement('canvas');
-            canvas.id = 'chart-' + Date.now() + '-' + index; // 使用时间戳和索引确保唯一ID
-            canvas.className = 'chart-canvas';
-            chartContainer.appendChild(canvas);
-            // 将图表容器插入到表格之后
-            tableElement.parentNode.insertBefore(chartContainer, tableElement.nextSibling);
-            
-            // 渲染图表
-            renderChart(canvas, tableData);
+                    // 创建图表包装容器
+        const chartWrapper = document.createElement('div');
+        chartWrapper.className = 'chart-wrapper';
+        chartWrapper.style.width = '100%';
+        chartWrapper.style.marginTop = '20px';
+        
+        // 创建图表类型选择控件
+        const chartControls = document.createElement('div');
+        chartControls.className = 'chart-controls';
+        chartControls.innerHTML = `
+            <label for="chart-type-${index}">图表类型: </label>
+            <select id="chart-type-${index}" class="chart-type-selector">
+                <option value="bar">柱状图</option>
+                <option value="line">折线图</option>
+                <option value="pie">饼图</option>
+                <option value="doughnut">环形图</option>
+            </select>
+        `;
+        chartWrapper.appendChild(chartControls);
+        
+        // 创建图表容器
+        const chartContainer = document.createElement('div');
+        chartContainer.className = 'chart-container';
+        chartContainer.style.width = '100%';
+        chartContainer.style.height = '400px';
+        
+        // 创建canvas元素用于图表
+        const canvas = document.createElement('canvas');
+        canvas.id = 'chart-' + Date.now() + '-' + index; // 使用时间戳和索引确保唯一ID
+        canvas.className = 'chart-canvas';
+        chartContainer.appendChild(canvas);
+        chartWrapper.appendChild(chartContainer);
+        
+        // 将图表包装容器插入到表格之后
+        tableElement.parentNode.insertBefore(chartWrapper, tableElement.nextSibling);
+        
+        // 渲染图表
+        renderChart(canvas, tableData, 'bar');
+        
+        // 添加图表类型切换事件监听器
+        const chartTypeSelector = chartControls.querySelector('.chart-type-selector');
+        chartTypeSelector.addEventListener('change', function() {
+            const selectedType = this.value;
+            renderChart(canvas, tableData, selectedType);
+        });
         }
     });
 }
@@ -635,7 +663,7 @@ function hexToRgba(hex, alpha) {
 }
 
 // 渲染图表
-function renderChart(canvas, tableData) {
+function renderChart(canvas, tableData, chartType = 'bar') {
     // 检查是否已加载Chart.js
     if (typeof Chart === 'undefined') {
         console.error('Chart.js not loaded');
@@ -645,14 +673,6 @@ function renderChart(canvas, tableData) {
     // 销毁已存在的图表实例（如果存在）
     if (canvas.chartInstance) {
         canvas.chartInstance.destroy();
-    }
-    
-    // 根据数据量选择合适的图表类型
-    let chartType = 'bar';
-    if (tableData.labels.length <= 5 && tableData.datasets.length === 1) {
-        chartType = 'doughnut'; // 如果数据点较少，使用环形图
-    } else if (tableData.labels.length > 10) {
-        chartType = 'line'; // 如果数据点较多，使用折线图
     }
     
     // 创建新的图表配置
