@@ -352,7 +352,30 @@ async function getAIResponse(userMessage) {
         });
         
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            // 尝试获取详细的错误信息
+            const errorText = await response.text();
+            let errorMessage = `HTTP error! status: ${response.status}`;
+            
+            try {
+                const errorData = JSON.parse(errorText);
+                if (errorData.error) {
+                    // 如果error是一个对象，尝试获取其中的message
+                    if (typeof errorData.error === 'object' && errorData.error.message) {
+                        errorMessage = `API错误 [${response.status}]: ${errorData.error.message}`;
+                    } else {
+                        errorMessage = `API错误 [${response.status}]: ${errorData.error}`;
+                    }
+                } else if (errorData.message) {
+                    errorMessage = `API错误 [${response.status}]: ${errorData.message}`;
+                }
+            } catch (e) {
+                // 如果不是JSON格式，直接使用文本
+                if (errorText) {
+                    errorMessage = `API错误 [${response.status}]: ${errorText}`;
+                }
+            }
+            
+            throw new Error(errorMessage);
         }
         
         // 移除"正在输入"提示
@@ -480,7 +503,8 @@ async function getAIResponse(userMessage) {
         }
         
         console.error('Error:', error);
-        displayMessage('抱歉，我无法回答您的问题。', 'ai');
+        // 显示详细的错误信息
+        displayMessage(`错误: ${error.message}`, 'ai');
     }
 }
 

@@ -135,7 +135,11 @@ def chat():
                         # 尝试获取更详细的错误信息
                         try:
                             error_detail = e.response.json()
-                            error_msg = f"API错误: {error_detail.get('message', str(e))}"
+                            # 如果error_detail包含嵌套的error对象，尝试提取详细信息
+                            if 'error' in error_detail and 'message' in error_detail['error']:
+                                error_msg = f"{error_detail['error']['message']}"
+                            else:
+                                error_msg = f"API错误: {str(e)} - {e.response.text}"
                         except:
                             error_msg = f"API错误: {str(e)} - {e.response.text}"
                     else:
