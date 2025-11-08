@@ -149,7 +149,7 @@ body {
     top: 20px;
     left: 270px; /* 调整左边距，为展开的菜单留出空间 (250px菜单 + 20px边距) */
     right: 440px; /* 留出对话框的空间 */
-    height: calc(100% - 90px); /* 调整底部空间，从140px减少到90px */
+    height: calc(100% - 40px); /* 进一步减少底部空间到40px */
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
     border-radius: 12px;
@@ -500,13 +500,46 @@ input:checked + .slider:before {
     padding-left: 15px;
 }
 
+.file-name-container {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: 5px;
+}
+
+.clear-file-btn {
+    background-color: #e9ecef;
+    color: #6c757d;
+    border: 1px solid #ced4da;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    margin-left: 5px;
+}
+
+.clear-file-btn {
+    display: none; /* 默认隐藏，只在有文件时显示 */
+}
+
+.clear-file-btn:hover {
+    background-color: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
 /* 图表输出区域 */
 .page-output {
     position: fixed;
     top: 20px;
     left: 270px; /* 调整左边距，为展开的菜单留出空间 (250px菜单 + 20px边距) */
     right: 440px; /* 留出对话框的空间 */
-    height: calc(100% - 140px); /* 考虑顶部和底部的空间 */
+    height: calc(100% - 40px); /* 进一步减少底部空间到40px */
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
     border-radius: 12px;

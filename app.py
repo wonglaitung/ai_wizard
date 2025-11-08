@@ -107,7 +107,7 @@ def chat():
             'max_tokens': settings.get('maxTokens', 8196),
             'top_p': settings.get('topP', 0.9),
             'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-            'api_key': settings.get('apiKey', None),  # 添加API密钥参数
+            'api_key': settings.get('apiKey') or os.getenv('QWEN_API_KEY'),  # 优先使用环境变量中的API密钥
             'base_url': settings.get('baseUrl', None),  # 添加基础URL参数
             'history': chat_history  # 添加聊天历史记录参数
         }
@@ -120,16 +120,43 @@ def chat():
                         yield 'data: ' + json.dumps({'reply': chunk}) + '\n\n'
                 # 发送结束信号
                 yield 'data: [DONE]\n\n'
+            except ValueError as e:
+                if "未提供API密钥" in str(e):
+                    yield 'data: ' + json.dumps({'error': '请在配置页面设置有效的API密钥。'}) + '\n\n'
+                else:
+                    print(f"处理聊天请求时出错: {e}")
+                    yield 'data: ' + json.dumps({'error': f'抱歉，处理您的请求时出错：{str(e)}'}) + '\n\n'
             except Exception as e:
                 print(f"处理聊天请求时出错: {e}")
-                yield 'data: ' + json.dumps({'error': '抱歉，处理您的请求时出错。'}) + '\n\n'
+                # 打印更多错误信息用于调试
+                try:
+                    if hasattr(e, 'response') and e.response is not None:
+                        print(f"响应内容: {e.response.text}")
+                        # 尝试获取更详细的错误信息
+                        try:
+                            error_detail = e.response.json()
+                            error_msg = f"API错误: {error_detail.get('message', str(e))}"
+                        except:
+                            error_msg = f"API错误: {str(e)} - {e.response.text}"
+                    else:
+                        error_msg = f'抱歉，处理您的请求时出错：{str(e)}'
+                except Exception as inner_e:
+                    # 防止错误处理本身出错
+                    print(f"生成错误消息时出错: {inner_e}")
+                    error_msg = '抱歉，处理您的请求时发生未知错误。'
+                
+                yield 'data: ' + json.dumps({'error': error_msg}) + '\n\n'
         
         return Response(generate(), mimetype='text/event-stream')
     except Exception as e:
         print(f"处理聊天请求时出错: {e}")
         
         def error_generator():
-            yield 'data: ' + json.dumps({'error': '抱歉，处理您的请求时出错。'}) + '\n\n'
+            try:
+                yield 'data: ' + json.dumps({'error': f'抱歉，处理您的请求时出错：{str(e)}'}) + '\n\n'
+            except Exception as inner_e:
+                print(f"生成错误响应时出错: {inner_e}")
+                yield 'data: ' + json.dumps({'error': '抱歉，处理您的请求时发生未知错误。'}) + '\n\n'
         
         return Response(error_generator(), mimetype='text/event-stream')
 
