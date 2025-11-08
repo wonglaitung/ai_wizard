@@ -64,7 +64,8 @@ if (fileUploadInput && fileNameSpan && clearFileBtn) {
     fileUploadInput.addEventListener('change', async (event) => {
         const file = event.target.files[0];
         if (file) {
-            fileNameSpan.textContent = `正在上传: ${file.name}`;
+            // 显示上传图标
+            fileNameSpan.innerHTML = `<span class="upload-icon">🔄</span> ${file.name}`;
             // 显示清除按钮
             clearFileBtn.style.display = 'block';
             
