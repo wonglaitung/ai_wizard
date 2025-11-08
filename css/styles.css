@@ -525,84 +525,127 @@ input:checked + .slider:before {
     left: 270px; /* 调整左边距，为展开的菜单留出空间 (250px菜单 + 20px边距) */
     right: 440px; /* 留出对话框的空间 */
     height: calc(100% - 140px); /* 考虑顶部和底部的空间 */
-    background-color: white;
-    border: 1px solid #ccc;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
     z-index: 1000; /* 降低z-index，避免挡住对话框 */
-    padding: 20px;
+    padding: 25px;
     overflow-y: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    transition: all 0.3s ease;
+}
+
+/* 专业标题样式 */
+.output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #f0f0f0;
 }
 
 .output-header h2 {
     margin: 0;
-    color: #333;
+    color: #2c3e50;
+    font-size: 1.5rem;
+    font-weight: 600;
 }
 
 .page-output .clear-btn {
-    background: none;
-    border: 1px solid #ccc;
-    color: #666;
-    padding: 4px 10px;
-    border-radius: 4px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #6c757d;
+    padding: 8px 16px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }
 
 .page-output .clear-btn:hover {
-    background-color: #f0f0f0;
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+    color: #495057;
 }
 
 .output-messages {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 15px;
 }
 
 .output-message {
-    padding: 10px 15px;
-    border-radius: 18px;
-    max-width: 80%;
+    padding: 16px 20px;
+    border-radius: 10px;
+    max-width: 90%;
     word-wrap: break-word;
+    background-color: #f8f9fa;
+    border-left: 4px solid #3498db;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: box-shadow 0.2s ease;
+}
+
+.output-message:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
 }
 
 .output-message a {
-    color: #007bff;
+    color: #1a73e8;
+    text-decoration: none;
+}
+
+.output-message a:hover {
     text-decoration: underline;
 }
 
 .output-message code {
-    background-color: #f1f1f1;
-    padding: 2px 4px;
+    background-color: #eef2f7;
+    padding: 3px 6px;
     border-radius: 4px;
-    font-family: monospace;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    color: #d6336c;
 }
 
 .output-message pre {
-    background-color: #f1f1f1;
-    padding: 10px;
-    border-radius: 4px;
+    background-color: #f8f9fa;
+    padding: 16px;
+    border-radius: 8px;
     overflow-x: auto;
+    border: 1px solid #e9ecef;
+    margin: 12px 0;
 }
 
 .output-message pre code {
     background-color: transparent;
     padding: 0;
+    color: #24292f;
+    border: none;
 }
 
 .output-message blockquote {
-    border-left: 3px solid #007bff;
-    padding-left: 10px;
+    border-left: 4px solid #3498db;
+    padding-left: 16px;
     margin: 10px 0;
     color: #666;
+    font-style: italic;
+    background-color: rgba(52, 152, 219, 0.05);
+    padding: 8px 12px;
+    border-radius: 0 8px 8px 0;
 }
 
 .output-message ul, .output-message ol {
-    padding-left: 20px;
+    padding-left: 25px;
+    margin: 10px 0;
 }
 
 .output-message h1, .output-message h2, .output-message h3 {
-    margin: 10px 0 5px 0;
+    margin: 15px 0 10px 0;
+    color: #2c3e50;
+    font-weight: 600;
 }
 
 .output-message h1 {
@@ -619,22 +662,88 @@ input:checked + .slider:before {
 
 .output-user-message {
     align-self: flex-end;
-    background-color: #007bff;
-    color: white;
+    background-color: #e3f2fd;
+    color: #0d47a1;
     margin-left: auto;
+    border-left-color: #2196f3;
+    border-radius: 18px 6px 18px 18px;
 }
 
 .output-user-message a {
-    color: #cce5ff;
+    color: #1565c0;
 }
 
 .output-user-message code {
-    background-color: #0056b3;
+    background-color: #bbdefb;
+    color: #0d47a1;
 }
 
 .output-ai-message {
     align-self: flex-start;
-    background-color: #e9ecef;
-    color: #333;
+    background-color: #f8f9fa;
+    color: #495057;
     margin-right: auto;
+    border-left-color: #6c757d;
+    border-radius: 6px 18px 18px 18px;
+}
+
+/* 图表容器专业样式 */
+.output-message canvas {
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    padding: 10px;
+    margin-top: 15px;
+    border: 1px solid #e9ecef;
+}
+
+/* 表格专业样式 */
+.output-message table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    background-color: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.output-message table th {
+    background-color: #3498db;
+    color: white;
+    text-align: left;
+    padding: 12px 15px;
+    font-weight: 600;
+}
+
+.output-message table tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.output-message table tr:hover {
+    background-color: #e9f7fe;
+}
+
+.output-message table td {
+    padding: 10px 15px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.output-message table tr:last-child td {
+    border-bottom: none;
+}
+
+/* 图表容器专业样式 */
+.chart-container {
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 15px;
+    margin-top: 20px;
+    border: 1px solid #e9ecef;
+}
+
+.chart-canvas {
+    background-color: #ffffff;
+    border-radius: 8px;
 }

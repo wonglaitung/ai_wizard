@@ -427,11 +427,9 @@ async function getAIResponse(userMessage) {
                             } else {
                                 chatMessages.scrollTop = chatMessages.scrollHeight;
                             }
-                            // 检查是否包含表格，如果是，尝试绘制图表
+                            // 检查是否包含表格，如果是，只在图表输出区域绘制图表
                             if (outputToggle.checked && outputAiMessageElement) {
                                 checkAndRenderChart(outputAiMessageElement);
-                            } else if (aiMessageElement) {
-                                checkAndRenderChart(aiMessageElement);
                             }
                             return;
                         }
@@ -516,6 +514,7 @@ function checkAndRenderChart(messageElement) {
         if (tableData) {
             // 在表格下方添加图表容器
             const chartContainer = document.createElement('div');
+            chartContainer.className = 'chart-container';
             chartContainer.style.width = '100%';
             chartContainer.style.height = '400px';
             chartContainer.style.marginTop = '20px';
@@ -523,6 +522,7 @@ function checkAndRenderChart(messageElement) {
             // 创建canvas元素用于图表
             const canvas = document.createElement('canvas');
             canvas.id = 'chart-' + Date.now() + '-' + index; // 使用时间戳和索引确保唯一ID
+            canvas.className = 'chart-canvas';
             chartContainer.appendChild(canvas);
             // 将图表容器插入到表格之后
             tableElement.parentNode.insertBefore(chartContainer, tableElement.nextSibling);
@@ -647,9 +647,17 @@ function renderChart(canvas, tableData) {
         canvas.chartInstance.destroy();
     }
     
+    // 根据数据量选择合适的图表类型
+    let chartType = 'bar';
+    if (tableData.labels.length <= 5 && tableData.datasets.length === 1) {
+        chartType = 'doughnut'; // 如果数据点较少，使用环形图
+    } else if (tableData.labels.length > 10) {
+        chartType = 'line'; // 如果数据点较多，使用折线图
+    }
+    
     // 创建新的图表配置
     const config = {
-        type: 'bar', // 默认使用柱状图
+        type: chartType,
         data: {
             labels: tableData.labels,
             datasets: tableData.datasets
@@ -660,16 +668,36 @@ function renderChart(canvas, tableData) {
             plugins: {
                 title: {
                     display: true,
-                    text: '数据图表'
+                    text: '数据可视化图表',
+                    font: {
+                        size: 16,
+                        weight: 'bold'
+                    },
+                    padding: {
+                        top: 10,
+                        bottom: 20
+                    }
                 },
                 legend: {
                     display: true,
                     position: 'top',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true
+                    }
                 }
             },
             scales: {
                 y: {
-                    beginAtZero: true
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                x: {
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
                 }
             }
         }
