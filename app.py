@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 import sys
 import os
 import json
+import tempfile
 
 # 将llm_services目录添加到Python路径
 sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
@@ -79,9 +80,14 @@ def chat():
     try:
         data = request.json
         user_message = data.get('message', '')
+        file_content = data.get('file_content', '')  # 获取上传的文件内容
         chat_history = data.get('history', [])
         settings = data.get('settings', {})
         output_as_table = data.get('outputAsTable', False)
+        
+        # 如果有文件内容，将其添加到用户消息中
+        if file_content:
+            user_message = f"请分析以下文件内容：\n\n{file_content}\n\n{user_message}"
         
         if not user_message:
             def error_generator():
@@ -126,6 +132,79 @@ def chat():
             yield 'data: ' + json.dumps({'error': '抱歉，处理您的请求时出错。'}) + '\n\n'
         
         return Response(error_generator(), mimetype='text/event-stream')
+
+# 支持的文件类型
+ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'docx'}
+
+def allowed_file(filename):
+    """检查文件扩展名是否允许"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def extract_text_from_file(filepath, filename):
+    """从文件中提取文本内容"""
+    import os
+    file_extension = filename.rsplit('.', 1)[1].lower()
+    
+    if file_extension == 'txt':
+        with open(filepath, 'r', encoding='utf-8') as file:
+            return file.read()
+    elif file_extension in ['csv']:
+        import pandas as pd
+        df = pd.read_csv(filepath)
+        return df.to_string()
+    elif file_extension in ['xlsx']:
+        import pandas as pd
+        df = pd.read_excel(filepath)
+        return df.to_string()
+    elif file_extension == 'docx':
+        from docx import Document
+        doc = Document(filepath)
+        full_text = []
+        for paragraph in doc.paragraphs:
+            full_text.append(paragraph.text)
+        return '\n'.join(full_text)
+    else:
+        with open(filepath, 'r', encoding='utf-8') as file:
+            return file.read()
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    """处理文件上传的API端点"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '没有选择文件'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': '没有选择文件'}), 400
+        
+        if file and allowed_file(file.filename):
+            # 创建临时文件
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
+                file.save(temp_file.name)
+                temp_filename = temp_file.name
+            
+            try:
+                # 从文件中提取文本内容
+                file_content = extract_text_from_file(temp_filename, file.filename)
+                
+                # 返回文件内容，以便前端可以将其发送给AI
+                return jsonify({
+                    'status': 'success',
+                    'message': '文件上传成功',
+                    'file_content': file_content,
+                    'filename': file.filename
+                })
+            finally:
+                # 删除临时文件
+                os.unlink(temp_filename)
+        else:
+            return jsonify({'error': '不支持的文件类型'}), 400
+    except Exception as e:
+        print(f"处理文件上传时出错: {e}")
+        return jsonify({'error': f'处理文件上传时出错: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5005)
