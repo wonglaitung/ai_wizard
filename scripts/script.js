@@ -15,26 +15,12 @@ const pages = document.querySelectorAll('.page');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 const sidebar = document.querySelector('.sidebar');
 const contentArea = document.querySelector('.content-area');
-
-// 配置页面相关元素
-const apiKeyInput = document.getElementById('api-key');
-const toggleApiKeyBtn = document.getElementById('toggle-api-key');
-const baseUrlInput = document.getElementById('base-url');
-const modelNameInput = document.getElementById('model-name');
-const temperatureInput = document.getElementById('temperature');
-const temperatureValue = document.getElementById('temperature-value');
-const maxTokensInput = document.getElementById('max-tokens');
-const topPInput = document.getElementById('top-p');
-const topPValue = document.getElementById('top-p-value');
-const frequencyPenaltyInput = document.getElementById('frequency-penalty');
-const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
-const saveConfigBtn = document.getElementById('save-config');
-const resetConfigBtn = document.getElementById('reset-config');
-
-
+const fileUploadInput = document.getElementById('file-upload');
+const fileNameSpan = document.getElementById('file-name');
 
 // 聊天历史记录
 let chatHistory = [];
+let uploadedFileContent = ''; // 存储上传的文件内容
 
 // 菜单收起功能
 toggleSidebarBtn.addEventListener('click', () => {
@@ -51,6 +37,46 @@ toggleSidebarBtn.addEventListener('click', () => {
     // 调整图表输出区域的位置
     adjustPageOutputPosition();
 });
+
+// 文件上传处理
+if (fileUploadInput && fileNameSpan) {
+    fileUploadInput.addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            fileNameSpan.textContent = file.name;
+            
+            // 创建FormData对象用于上传文件
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                // 上传文件到服务器
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.status === 'success') {
+                    // 保存文件内容
+                    uploadedFileContent = result.file_content;
+                } else {
+                    console.error(`文件上传失败: ${result.error || '未知错误'}`);
+                    uploadedFileContent = '';
+                    fileNameSpan.textContent = '文件上传失败';
+                }
+            } catch (error) {
+                console.error('文件上传错误:', error);
+                uploadedFileContent = '';
+                fileNameSpan.textContent = '文件上传失败';
+            }
+        } else {
+            fileNameSpan.textContent = '未选择文件';
+            uploadedFileContent = '';
+        }
+    });
+}
 
 // 页面切换功能
 if (menuItems && pages) {
@@ -274,6 +300,7 @@ async function getAIResponse(userMessage) {
             },
             body: JSON.stringify({ 
                 message: userMessage,
+                file_content: uploadedFileContent, // 添加上传的文件内容
                 history: chatHistory,
                 settings: settings,
                 outputAsTable: shouldOutputAsTable
