@@ -55,7 +55,7 @@ def embed_with_llm(query, base_url=None):
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
-def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
+def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
     """
     Generate a streaming response from Qwen model for a given query.
     
@@ -63,7 +63,7 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=20
         query (str): The user's query
         model (str): The model name to use. Default is 'qwen-max'.
         temperature (float): Controls randomness in output. Default is 0.7.
-        max_tokens (int): Maximum number of tokens to generate. Default is 2048.
+        max_tokens (int): Maximum number of tokens to generate. Default is 8196.
         top_p (float): Controls diversity of output. Default is 0.9.
         frequency_penalty (float): Controls repetition. Default is 0.5.
         api_key (str): API key for authentication. If None, uses environment variable. Default is None.
@@ -116,14 +116,21 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=20
             'content': query
         })
         
+        # 参数验证和限制
+        # 检查并限制参数值在API允许范围内
+        validated_temperature = max(0.0, min(2.0, temperature))  # 通常temperature范围是0-2
+        validated_max_tokens = max(1, min(8192, max_tokens))    # max_tokens通常最大为8192
+        validated_top_p = max(0.0, min(1.0, top_p))            # top_p范围是0-1
+        validated_frequency_penalty = max(-2.0, min(2.0, frequency_penalty))  # frequency_penalty范围是-2到2
+        
         payload = {
             'model': model,
             'messages': messages,
             'stream': True,
-            'top_p': top_p,
-            'temperature': temperature,
-            'max_tokens': max_tokens,
-            'frequency_penalty': frequency_penalty,
+            'top_p': validated_top_p,
+            'temperature': validated_temperature,
+            'max_tokens': validated_max_tokens,
+            'frequency_penalty': validated_frequency_penalty,
             'seed': 1368,
             'enable_thinking': enable_thinking  # 使用传入的参数
         }
@@ -153,7 +160,7 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=20
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
-def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
+def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
     """
     Generate a response from Qwen model for a given query.
     
@@ -161,7 +168,7 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top
         query (str): The user's query
         model (str): The model name to use. Default is 'qwen-max'.
         temperature (float): Controls randomness in output. Default is 0.7.
-        max_tokens (int): Maximum number of tokens to generate. Default is 2048.
+        max_tokens (int): Maximum number of tokens to generate. Default is 8196.
         top_p (float): Controls diversity of output. Default is 0.9.
         frequency_penalty (float): Controls repetition. Default is 0.5.
         api_key (str): API key for authentication. If None, uses environment variable. Default is None.
@@ -214,14 +221,21 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=2048, top
             'content': query
         })
         
+        # 参数验证和限制
+        # 检查并限制参数值在API允许范围内
+        validated_temperature = max(0.0, min(2.0, temperature))  # 通常temperature范围是0-2
+        validated_max_tokens = max(1, min(8192, max_tokens))    # max_tokens通常最大为8192
+        validated_top_p = max(0.0, min(1.0, top_p))            # top_p范围是0-1
+        validated_frequency_penalty = max(-2.0, min(2.0, frequency_penalty))  # frequency_penalty范围是-2到2
+        
         payload = {
             'model': model,
             'messages': messages,
             'stream': False,
-            'top_p': top_p,
-            'temperature': temperature,
-            'max_tokens': max_tokens,
-            'frequency_penalty': frequency_penalty,
+            'top_p': validated_top_p,
+            'temperature': validated_temperature,
+            'max_tokens': validated_max_tokens,
+            'frequency_penalty': validated_frequency_penalty,
             'seed': 1368,
             'enable_thinking': enable_thinking  # 使用传入的参数
         }

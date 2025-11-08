@@ -16,6 +16,21 @@ const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 const sidebar = document.querySelector('.sidebar');
 const contentArea = document.querySelector('.content-area');
 
+// 配置页面相关元素
+const apiKeyInput = document.getElementById('api-key');
+const toggleApiKeyBtn = document.getElementById('toggle-api-key');
+const baseUrlInput = document.getElementById('base-url');
+const modelNameInput = document.getElementById('model-name');
+const temperatureInput = document.getElementById('temperature');
+const temperatureValue = document.getElementById('temperature-value');
+const maxTokensInput = document.getElementById('max-tokens');
+const topPInput = document.getElementById('top-p');
+const topPValue = document.getElementById('top-p-value');
+const frequencyPenaltyInput = document.getElementById('frequency-penalty');
+const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+const saveConfigBtn = document.getElementById('save-config');
+const resetConfigBtn = document.getElementById('reset-config');
+
 
 
 // 聊天历史记录
@@ -237,7 +252,7 @@ async function getAIResponse(userMessage) {
         let settings = {
             modelName: 'qwen-max',
             temperature: 0.7,
-            maxTokens: 2048,
+            maxTokens: 8196,
             topP: 0.9,
             frequencyPenalty: 0.5,
             baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'  // 默认URL
@@ -644,3 +659,95 @@ function displayTypingIndicator() {
     
     return { chatIndicator: chatIndicator, outputIndicator: outputIndicator };
 }
+
+// 配置页面功能
+document.addEventListener('DOMContentLoaded', function() {
+    // 加载保存的配置
+    loadConfig();
+    
+    // API密钥显示/隐藏切换
+    if (toggleApiKeyBtn && apiKeyInput) {
+        toggleApiKeyBtn.addEventListener('click', function() {
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                toggleApiKeyBtn.textContent = '🙈';
+            } else {
+                apiKeyInput.type = 'password';
+                toggleApiKeyBtn.textContent = '👁️';
+            }
+        });
+    }
+    
+    // 滑块值显示
+    if (temperatureInput && temperatureValue) {
+        temperatureInput.addEventListener('input', function() {
+            temperatureValue.textContent = this.value;
+        });
+    }
+    
+    if (topPInput && topPValue) {
+        topPInput.addEventListener('input', function() {
+            topPValue.textContent = this.value;
+        });
+    }
+    
+    if (frequencyPenaltyInput && frequencyPenaltyValue) {
+        frequencyPenaltyInput.addEventListener('input', function() {
+            frequencyPenaltyValue.textContent = this.value;
+        });
+    }
+    
+    // 保存配置
+    if (saveConfigBtn) {
+        saveConfigBtn.addEventListener('click', function() {
+            saveConfig();
+            alert('配置已保存！');
+        });
+    }
+    
+    // 重置配置
+    if (resetConfigBtn) {
+        resetConfigBtn.addEventListener('click', function() {
+            resetConfig();
+            alert('配置已重置为默认值！');
+        });
+    }
+});
+
+// 加载配置
+function loadConfig() {
+    const savedConfig = localStorage.getItem('aiSettings');
+    if (savedConfig) {
+        const config = JSON.parse(savedConfig);
+        
+        if (apiKeyInput) apiKeyInput.value = config.apiKey || '';
+        if (baseUrlInput) baseUrlInput.value = config.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+        if (modelNameInput) modelNameInput.value = config.modelName || 'qwen-max';
+        if (temperatureInput) temperatureInput.value = config.temperature || 0.7;
+        if (maxTokensInput) maxTokensInput.value = config.maxTokens || 8196;
+        if (topPInput) topPInput.value = config.topP || 0.9;
+        if (frequencyPenaltyInput) frequencyPenaltyInput.value = config.frequencyPenalty || 0.5;
+        
+        // 更新滑块值显示
+        if (temperatureValue) temperatureValue.textContent = config.temperature || 0.7;
+        if (topPValue) topPValue.textContent = config.topP || 0.9;
+        if (frequencyPenaltyValue) frequencyPenaltyValue.textContent = config.frequencyPenalty || 0.5;
+    }
+}
+
+// 保存配置
+function saveConfig() {
+    const config = {
+        apiKey: apiKeyInput ? apiKeyInput.value : '',
+        baseUrl: baseUrlInput ? baseUrlInput.value : 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        modelName: modelNameInput ? modelNameInput.value : 'qwen-max',
+        temperature: temperatureInput ? parseFloat(temperatureInput.value) : 0.7,
+        maxTokens: maxTokensInput ? parseInt(maxTokensInput.value) : 8196,
+        topP: topPInput ? parseFloat(topPInput.value) : 0.9,
+        frequencyPenalty: frequencyPenaltyInput ? parseFloat(frequencyPenaltyInput.value) : 0.5
+    };
+    
+    localStorage.setItem('aiSettings', JSON.stringify(config));
+}
+
+// 重置配置

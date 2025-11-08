@@ -20,7 +20,10 @@
                     <span>💬</span>
                     <span>新对话</span>
                 </li>
-                
+                <li class="menu-item" data-page="config">
+                    <span>⚙️</span>
+                    <span>配置</span>
+                </li>
             </ul>
         </div>
 
@@ -57,6 +60,7 @@
                         <button class="preset-btn" data-question="中国近十年的GPD增长情况">中国近十年的GDP增长情况</button>
                         <button class="preset-btn" data-question="展示一个销售数据表格">展示一个销售数据表格</button>
                     </div>
+                </div>
 
                 <!-- 图表输出区域 -->
                 <div id="page-output" class="page-output hidden">
@@ -66,6 +70,61 @@
                     <div id="output-messages" class="output-messages"></div>
                 </div>
             </div>
+
+            <!-- 配置页面 -->
+            <div id="config-page" class="page">
+                <div class="config-container">
+                    <h2>AI 模型配置</h2>
+                    <div class="config-form">
+                        <div class="config-group">
+                            <label for="base-url">基础 URL:</label>
+                            <input type="text" id="base-url" placeholder="请输入基础 URL" value="https://dashscope.aliyuncs.com/compatible-mode/v1">
+                        </div>
+                        
+                        <div class="config-group">
+                            <label for="api-key">API 密钥:</label>
+                            <div class="input-with-button">
+                                <input type="password" id="api-key" placeholder="请输入 API 密钥">
+                                <button type="button" id="toggle-api-key" class="toggle-password-btn">👁️</button>
+                            </div>
+                        </div>
+                        
+                        <div class="config-group">
+                            <label for="model-name">模型名称:</label>
+                            <input type="text" id="model-name" placeholder="请输入模型名称" value="qwen-max">
+                        </div>
+                        
+                        <div class="config-group">
+                            <label for="temperature">温度 (Temperature):</label>
+                            <input type="range" id="temperature" min="0" max="1" step="0.01" value="0.7">
+                            <span id="temperature-value">0.7</span>
+                        </div>
+                        
+                        <div class="config-group">
+                            <label for="max-tokens">最大 Token 数:</label>
+                            <input type="number" id="max-tokens" min="1" max="32768" value="8196">
+                        </div>
+                        
+                        <div class="config-group">
+                            <label for="top-p">Top P:</label>
+                            <input type="range" id="top-p" min="0" max="1" step="0.01" value="0.9">
+                            <span id="top-p-value">0.9</span>
+                        </div>
+                        
+                        <div class="config-group">
+                            <label for="frequency-penalty">频率惩罚 (Frequency Penalty):</label>
+                            <input type="range" id="frequency-penalty" min="0" max="2" step="0.01" value="0.5">
+                            <span id="frequency-penalty-value">0.5</span>
+                        </div>
+                        
+                        <div class="config-actions">
+                            <button id="save-config" class="save-btn">保存配置</button>
+                            <button id="reset-config" class="reset-btn">重置为默认值</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
             
 
