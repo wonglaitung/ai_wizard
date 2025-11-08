@@ -248,10 +248,16 @@ function adjustPageOutputPosition() {
     }
 }
 
-// 显示对话框
+// 切换对话框显示/隐藏
 chatTrigger.addEventListener('click', () => {
-    chatContainer.classList.remove('hidden');
-    userInput.focus(); // 自动聚焦到输入框
+    if (chatContainer.classList.contains('hidden')) {
+        // 如果对话框是隐藏的，显示它
+        chatContainer.classList.remove('hidden');
+        userInput.focus(); // 自动聚焦到输入框
+    } else {
+        // 如果对话框是显示的，隐藏它
+        chatContainer.classList.add('hidden');
+    }
 });
 
 // 隐藏对话框
