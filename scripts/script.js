@@ -38,6 +38,38 @@ const resetConfigBtn = document.getElementById('reset-config');
 let chatHistory = [];
 let uploadedFileContent = ''; // 存储上传的文件内容
 
+// 估算文本token数量的函数（改进版）
+function estimateTokenCount(text) {
+    // 这是一个改进的估算方法，更接近实际的token计算
+    if (!text) return 0;
+    
+    // 移除多余的空白字符
+    const cleanText = text.replace(/\s+/g, ' ').trim();
+    
+    // 更精确的token估算方法
+    // 基于英文和中文混合文本的经验估算
+    let tokenCount = 0;
+    
+    // 对于英文文本，大约每4个字符为1个token
+    // 对于中文文本，每个汉字大约为1-2个token
+    for (let i = 0; i < cleanText.length; i++) {
+        const char = cleanText[i];
+        // 检查是否为中文字符
+        if (/[\u4e00-\u9fa5]/.test(char)) {
+            // 中文字符计为1.5个token
+            tokenCount += 1.5;
+        } else if (/\s/.test(char)) {
+            // 空白字符计为0.25个token
+            tokenCount += 0.25;
+        } else {
+            // 其他字符（英文、数字、符号）计为0.25个token
+            tokenCount += 0.25;
+        }
+    }
+    
+    return Math.ceil(tokenCount);
+}
+
 // 初始化清除按钮状态
 if (clearFileBtn) {
     clearFileBtn.style.display = 'none';
@@ -85,7 +117,32 @@ if (fileUploadInput && fileNameSpan && clearFileBtn) {
                 if (response.ok && result.status === 'success') {
                     // 保存文件内容
                     uploadedFileContent = result.file_content;
-                    fileNameSpan.textContent = file.name; // 上传成功后显示文件名
+                    
+                    // 检查文件内容的token数量
+                    const tokenCount = estimateTokenCount(result.file_content);
+                    // 从配置中获取最大Token数
+                    const savedSettings = localStorage.getItem('aiSettings');
+                    let maxTokens = 8196; // 默认值
+                    if (savedSettings) {
+                        const settings = JSON.parse(savedSettings);
+                        maxTokens = settings.maxTokens || 8196;
+                    }
+                    
+                    if (tokenCount > maxTokens) {
+                        // 显示警告信息
+                        fileNameSpan.innerHTML = `<span style="color: #ff6b35; font-weight: bold;">⚠️ ${file.name} (约${tokenCount} tokens - 可能超出限制)</span>`;
+                        // 添加一个提示信息
+                        alert(`文件 "${file.name}" 的内容可能超出最大Token限制（约${tokenCount} tokens，最大限制为${maxTokens}）。向大模型发送时可能失败。`);
+                    } else {
+                        fileNameSpan.textContent = file.name; // 上传成功后显示文件名
+                    }
+                    
+                    // 自动打开图表输出开关
+                    if (outputToggle && !outputToggle.checked) {
+                        outputToggle.checked = true;
+                        // 触发change事件以确保UI更新
+                        outputToggle.dispatchEvent(new Event('change'));
+                    }
                 } else {
                     console.error(`文件上传失败: ${result.error || '未知错误'}`);
                     uploadedFileContent = '';
@@ -246,6 +303,14 @@ userInput.addEventListener('keypress', (e) => {
 presetButtons.forEach(button => {
     button.addEventListener('click', () => {
         const question = button.getAttribute('data-question');
+        
+        // 如果是"展示一个销售数据表格"，自动打开图表输出开关
+        if (question === "展示一个销售数据表格" && outputToggle && !outputToggle.checked) {
+            outputToggle.checked = true;
+            // 触发change事件以确保UI更新
+            outputToggle.dispatchEvent(new Event('change'));
+        }
+        
         // 显示用户消息
         displayMessage(question, 'user');
         // 调用AI接口获取回复
@@ -257,6 +322,32 @@ presetButtons.forEach(button => {
 function sendMessage() {
     const message = userInput.value.trim();
     if (message) {
+        // 检查文件内容的token数（如果有的话）
+        if (uploadedFileContent) {
+            const fileTokenCount = estimateTokenCount(uploadedFileContent);
+            const messageTokenCount = estimateTokenCount(message);
+            const totalTokenCount = fileTokenCount + messageTokenCount;
+            // 从配置中获取最大Token数
+            const savedSettings = localStorage.getItem('aiSettings');
+            let maxTokens = 8196; // 默认值
+            if (savedSettings) {
+                const settings = JSON.parse(savedSettings);
+                maxTokens = settings.maxTokens || 8196;
+            }
+            
+            if (totalTokenCount > maxTokens) {
+                if (confirm(`警告：您的消息和文件内容的总token数约为${totalTokenCount}，超出最大限制${maxTokens}。向大模型发送时可能失败。是否继续发送？`)) {
+                    // 显示用户消息
+                    displayMessage(message, 'user');
+                    userInput.value = ''; // 清空输入框
+                    
+                    // 调用AI接口获取回复
+                    getAIResponse(message);
+                }
+                return; // 如果用户取消，则不发送消息
+            }
+        }
+        
         // 显示用户消息
         displayMessage(message, 'user');
         userInput.value = ''; // 清空输入框
