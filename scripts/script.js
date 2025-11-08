@@ -97,7 +97,7 @@ if (fileUploadInput && fileNameSpan && clearFileBtn) {
         const file = event.target.files[0];
         if (file) {
             // 显示上传图标
-            fileNameSpan.innerHTML = `<span class="upload-icon">🔄</span> ${file.name}`;
+            fileNameSpan.innerHTML = `<span class="upload-icon">📤</span> ${file.name}`;
             // 显示清除按钮
             clearFileBtn.style.display = 'block';
             
@@ -618,7 +618,11 @@ function checkAndRenderChart(messageElement) {
             // 创建图表类型选择控件
             const chartControls = document.createElement('div');
             chartControls.className = 'chart-controls';
-            chartControls.innerHTML = `
+            
+            // 创建左侧控件容器
+            const leftControls = document.createElement('div');
+            leftControls.className = 'chart-controls-left';
+            leftControls.innerHTML = `
                 <label for="chart-type-${index}">图表类型: </label>
                 <select id="chart-type-${index}" class="chart-type-selector">
                     <option value="bar">柱状图</option>
@@ -627,6 +631,25 @@ function checkAndRenderChart(messageElement) {
                     <option value="doughnut">环形图</option>
                 </select>
             `;
+            
+            // 创建右侧控件容器
+            const rightControls = document.createElement('div');
+            rightControls.className = 'chart-controls-right';
+            
+            // 创建导出按钮
+            const exportButton = document.createElement('button');
+            exportButton.className = 'export-chart-btn';
+            exportButton.innerHTML = '📥'; // 使用图标表示导出
+            exportButton.title = '导出图表为图片';
+            exportButton.addEventListener('click', function() {
+                exportChartAsImage(canvas);
+            });
+            
+            // 将控件添加到容器中
+            rightControls.appendChild(exportButton);
+            chartControls.appendChild(leftControls);
+            chartControls.appendChild(rightControls);
+            
             chartWrapper.appendChild(chartControls);
             
             // 创建图表容器
@@ -649,7 +672,7 @@ function checkAndRenderChart(messageElement) {
             renderChart(canvas, tableData, 'bar');
             
             // 添加图表类型切换事件监听器
-            const chartTypeSelector = chartControls.querySelector('.chart-type-selector');
+            const chartTypeSelector = leftControls.querySelector('.chart-type-selector');
             chartTypeSelector.addEventListener('change', function() {
                 const selectedType = this.value;
                 renderChart(canvas, tableData, selectedType);
@@ -759,6 +782,37 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// 导出图表为图片
+function exportChartAsImage(canvas) {
+    // 创建一个临时的canvas元素用于绘制带背景的图表
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // 设置临时canvas的尺寸与原canvas相同
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    
+    // 填充白色背景
+    tempCtx.fillStyle = '#ffffff';
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    
+    // 将原canvas内容绘制到临时canvas上
+    tempCtx.drawImage(canvas, 0, 0);
+    
+    // 获取带背景的图表base64数据URL
+    const imageBase64 = tempCanvas.toDataURL('image/png');
+    
+    // 创建下载链接
+    const link = document.createElement('a');
+    link.href = imageBase64;
+    link.download = 'chart-' + new Date().getTime() + '.png'; // 使用时间戳作为文件名
+    
+    // 触发下载
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 // 渲染图表
 function renderChart(canvas, tableData, chartType = 'bar') {
     // 检查是否已加载Chart.js
@@ -817,7 +871,18 @@ function renderChart(canvas, tableData, chartType = 'bar') {
                     }
                 }
             }
-        }
+        },
+        plugins: [{
+            id: 'background',
+            beforeDraw: (chart) => {
+                const ctx = chart.canvas.getContext('2d');
+                ctx.save();
+                ctx.globalCompositeOperation = 'destination-over';
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, chart.width, chart.height);
+                ctx.restore();
+            }
+        }]
     };
     
     // 创建图表实例
