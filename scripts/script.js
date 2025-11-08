@@ -17,10 +17,31 @@ const sidebar = document.querySelector('.sidebar');
 const contentArea = document.querySelector('.content-area');
 const fileUploadInput = document.getElementById('file-upload');
 const fileNameSpan = document.getElementById('file-name');
+const clearFileBtn = document.getElementById('clear-file');
+
+// 配置页面相关元素
+const apiKeyInput = document.getElementById('api-key');
+const toggleApiKeyBtn = document.getElementById('toggle-api-key');
+const baseUrlInput = document.getElementById('base-url');
+const modelNameInput = document.getElementById('model-name');
+const temperatureInput = document.getElementById('temperature');
+const temperatureValue = document.getElementById('temperature-value');
+const maxTokensInput = document.getElementById('max-tokens');
+const topPInput = document.getElementById('top-p');
+const topPValue = document.getElementById('top-p-value');
+const frequencyPenaltyInput = document.getElementById('frequency-penalty');
+const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+const saveConfigBtn = document.getElementById('save-config');
+const resetConfigBtn = document.getElementById('reset-config');
 
 // 聊天历史记录
 let chatHistory = [];
 let uploadedFileContent = ''; // 存储上传的文件内容
+
+// 初始化清除按钮状态
+if (clearFileBtn) {
+    clearFileBtn.style.display = 'none';
+}
 
 // 菜单收起功能
 toggleSidebarBtn.addEventListener('click', () => {
@@ -39,11 +60,13 @@ toggleSidebarBtn.addEventListener('click', () => {
 });
 
 // 文件上传处理
-if (fileUploadInput && fileNameSpan) {
+if (fileUploadInput && fileNameSpan && clearFileBtn) {
     fileUploadInput.addEventListener('change', async (event) => {
         const file = event.target.files[0];
         if (file) {
-            fileNameSpan.textContent = file.name;
+            fileNameSpan.textContent = `正在上传: ${file.name}`;
+            // 显示清除按钮
+            clearFileBtn.style.display = 'block';
             
             // 创建FormData对象用于上传文件
             const formData = new FormData();
@@ -61,20 +84,39 @@ if (fileUploadInput && fileNameSpan) {
                 if (response.ok && result.status === 'success') {
                     // 保存文件内容
                     uploadedFileContent = result.file_content;
+                    fileNameSpan.textContent = file.name; // 上传成功后显示文件名
                 } else {
                     console.error(`文件上传失败: ${result.error || '未知错误'}`);
                     uploadedFileContent = '';
                     fileNameSpan.textContent = '文件上传失败';
+                    clearFileBtn.style.display = 'none';
                 }
             } catch (error) {
                 console.error('文件上传错误:', error);
                 uploadedFileContent = '';
                 fileNameSpan.textContent = '文件上传失败';
+                clearFileBtn.style.display = 'none';
             }
         } else {
             fileNameSpan.textContent = '未选择文件';
             uploadedFileContent = '';
+            clearFileBtn.style.display = 'none';
         }
+    });
+}
+
+// 清除文件按钮处理
+if (clearFileBtn && fileNameSpan) {
+    clearFileBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        // 重置文件输入
+        fileUploadInput.value = '';
+        // 重置文件名显示
+        fileNameSpan.textContent = '未选择文件';
+        // 清空上传的文件内容
+        uploadedFileContent = '';
+        // 隐藏清除按钮
+        clearFileBtn.style.display = 'none';
     });
 }
 
@@ -281,7 +323,8 @@ async function getAIResponse(userMessage) {
             maxTokens: 8196,
             topP: 0.9,
             frequencyPenalty: 0.5,
-            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1'  // 默认URL
+            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',  // 默认URL
+            apiKey: ''  // API密钥
         };
         
         const savedSettings = localStorage.getItem('aiSettings');
