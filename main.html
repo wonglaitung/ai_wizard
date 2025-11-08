@@ -45,7 +45,7 @@
                                 <input type="checkbox" id="output-toggle">
                                 <span class="slider"></span>
                             </label>
-                            <span class="toggle-label">页面输出</span>
+                            <span class="toggle-label">图表输出</span>
                             <button id="clear-chat" class="clear-btn">清除</button>
                             <button id="close-chat" class="close-btn">&times;</button>
                         </div>
@@ -57,18 +57,17 @@
                     </div>
                     <!-- 预设问题 -->
                     <div class="preset-questions">
-                        <button class="preset-btn" data-question="你能做什么">你能做什么</button>
-                        <button class="preset-btn" data-question="你是谁">你是谁</button>
+                        <button class="preset-btn" data-question="输出中国近十年的GPD增长情况">输出中国近十年的GDP增长情况</button>
+                        <button class="preset-btn" data-question="请展示一个销售数据表格">请展示一个销售数据表格</button>
                     </div>
-                </div>
 
-                <!-- 页面输出区域 -->
-    <div id="page-output" class="page-output hidden">
-        <div class="output-header">
-            <h2>对话记录</h2>
-        </div>
-        <div id="output-messages" class="output-messages"></div>
-    </div>
+                <!-- 图表输出区域 -->
+                <div id="page-output" class="page-output hidden">
+                    <div class="output-header">
+                        <h2>图表输出</h2>
+                    </div>
+                    <div id="output-messages" class="output-messages"></div>
+                </div>
             </div>
 
             <!-- 设置页面将通过JavaScript动态加载 -->
@@ -84,6 +83,7 @@
 
     <!-- 在页面加载后初始化默认显示的页面 -->
     <script src="scripts/marked.min.js"></script>
+    <script src="scripts/chart.js"></script>
     <script>
         // 默认显示新对话页面
         document.addEventListener('DOMContentLoaded', function() {
@@ -97,6 +97,28 @@
             
             if (chatPage) {
                 chatPage.classList.add('active');
+                
+                // 确保对话框不会被菜单挡住
+                const chatContainer = document.getElementById('chat-container');
+                const pageOutput = document.getElementById('page-output');
+                
+                if (chatContainer) {
+                    // 添加样式以确保对话框不会被菜单挡住
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        .chat-container {
+                            right: 20px !important;
+                        }
+                        
+                        .page-output {
+                            right: 440px !important; /* 为对话框留出空间 */
+                        }
+                    `;
+                    document.head.appendChild(style);
+                    
+                    // 确保对话框是可见的
+                    chatContainer.classList.remove('hidden');
+                }
             }
             
             // 初始化设置页面功能（如果在设置页面）

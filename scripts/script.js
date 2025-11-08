@@ -34,7 +34,7 @@ toggleSidebarBtn.addEventListener('click', () => {
         toggleSidebarBtn.textContent = '◀';
     }
     
-    // 调整页面输出区域的位置
+    // 调整图表输出区域的位置
     adjustPageOutputPosition();
 });
 
@@ -47,7 +47,7 @@ if (menuItems && pages) {
                 sidebar.classList.remove('collapsed');
                 contentArea.classList.remove('sidebar-collapsed');
                 toggleSidebarBtn.textContent = '◀';
-                // 调整页面输出区域的位置
+                // 调整图表输出区域的位置
                 adjustPageOutputPosition();
             }
             
@@ -203,14 +203,14 @@ function initializeSettingsPageFunctions() {
     }, 100); // 延迟100毫秒确保内容已加载
 }
 
-// 调整页面输出区域位置的函数
+// 调整图表输出区域位置的函数
 function adjustPageOutputPosition() {
     if (pageOutput) {
         if (sidebar.classList.contains('collapsed')) {
-            // 菜单收起时，页面输出区域左边距减少
+            // 菜单收起时，图表输出区域左边距减少
             pageOutput.style.left = '80px';
         } else {
-            // 菜单展开时，页面输出区域左边距增加
+            // 菜单展开时，图表输出区域左边距增加
             pageOutput.style.left = '270px';
         }
     }
@@ -236,7 +236,7 @@ if (clearChat) {
                 chatMessages.innerHTML = '';
             }
             
-            // 如果页面输出区域是开启的，也清除页面输出区域的内容
+            // 如果图表输出区域是开启的，也清除图表输出区域的内容
             if (outputMessages) {
                 outputMessages.innerHTML = '';
             }
@@ -296,7 +296,7 @@ function displayMessage(message, sender) {
     // 将消息添加到聊天历史记录
     chatHistory.push({ role: sender, content: message });
     
-    // 如果开关打开，只在页面输出区域显示消息
+    // 如果开关打开，只在图表输出区域显示消息
     if (outputToggle.checked) {
         const outputMessageElement = document.createElement('div');
         outputMessageElement.classList.add('output-message');
@@ -354,6 +354,9 @@ async function getAIResponse(userMessage) {
             settings = {...settings, ...JSON.parse(savedSettings)};
         }
         
+        // 检查输出开关状态，如果打开则添加表格输出要求
+        const shouldOutputAsTable = outputToggle && outputToggle.checked;
+        
         // 调用后端API
         const response = await fetch('/api/chat', {
             method: 'POST',
@@ -363,7 +366,8 @@ async function getAIResponse(userMessage) {
             body: JSON.stringify({ 
                 message: userMessage,
                 history: chatHistory,
-                settings: settings
+                settings: settings,
+                outputAsTable: shouldOutputAsTable
             })
         });
         
@@ -386,7 +390,7 @@ async function getAIResponse(userMessage) {
         let aiMessageElement, outputAiMessageElement;
         
         if (outputToggle.checked) {
-            // 如果开关打开，只在页面输出区域创建AI消息元素
+            // 如果开关打开，只在图表输出区域创建AI消息元素
             outputAiMessageElement = document.createElement('div');
             outputAiMessageElement.classList.add('output-message', 'output-ai-message');
             outputMessages.appendChild(outputAiMessageElement);
@@ -422,6 +426,12 @@ async function getAIResponse(userMessage) {
                                 outputMessages.scrollTop = outputMessages.scrollHeight;
                             } else {
                                 chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                            // 检查是否包含表格，如果是，尝试绘制图表
+                            if (outputToggle.checked && outputAiMessageElement) {
+                                checkAndRenderChart(outputAiMessageElement);
+                            } else if (aiMessageElement) {
+                                checkAndRenderChart(aiMessageElement);
                             }
                             return;
                         }
@@ -494,12 +504,187 @@ async function getAIResponse(userMessage) {
     }
 }
 
+// 检查是否包含表格并渲染图表
+function checkAndRenderChart(messageElement) {
+    // 获取所有表格元素
+    const tableElements = messageElement.querySelectorAll('table');
+    
+    // 为每个表格创建对应的图表
+    tableElements.forEach((tableElement, index) => {
+        // 解析表格数据
+        const tableData = parseTableData(tableElement);
+        if (tableData) {
+            // 在表格下方添加图表容器
+            const chartContainer = document.createElement('div');
+            chartContainer.style.width = '100%';
+            chartContainer.style.height = '400px';
+            chartContainer.style.marginTop = '20px';
+            
+            // 创建canvas元素用于图表
+            const canvas = document.createElement('canvas');
+            canvas.id = 'chart-' + Date.now() + '-' + index; // 使用时间戳和索引确保唯一ID
+            chartContainer.appendChild(canvas);
+            // 将图表容器插入到表格之后
+            tableElement.parentNode.insertBefore(chartContainer, tableElement.nextSibling);
+            
+            // 渲染图表
+            renderChart(canvas, tableData);
+        }
+    });
+}
+
+// 解析表格数据
+function parseTableData(table) {
+    const rows = table.querySelectorAll('tr');
+    if (rows.length < 2) return null; // 至少需要表头和一行数据
+    
+    const headers = [];
+    const headerCells = rows[0].querySelectorAll('th, td');
+    for (let j = 0; j < headerCells.length; j++) {
+        headers.push(headerCells[j].textContent.trim());
+    }
+    
+    const datasets = [];
+    // 为每列创建一个数据集（跳过第一列，假设它是标签）
+    for (let col = 1; col < headers.length; col++) {
+        const data = [];
+        for (let i = 1; i < rows.length; i++) {
+            const cell = rows[i].querySelectorAll('th, td')[col];
+            if (cell) {
+                const value = parseFloat(cell.textContent.trim());
+                if (!isNaN(value)) {
+                    data.push(value);
+                } else {
+                    // 如果不是数字，尝试转换
+                    data.push(0);
+                }
+            } else {
+                data.push(0);
+            }
+        }
+        
+        // 生成一个颜色
+        const hue = (col * 137.508) % 360; // 使用黄金角度生成不同颜色
+        const color = hslToHex(hue, 50, 50);
+        
+        datasets.push({
+            label: headers[col],
+            data: data,
+            borderColor: color,
+            backgroundColor: hexToRgba(color, 0.2),
+            borderWidth: 2
+        });
+    }
+    
+    // 获取标签（第一列）
+    const labels = [];
+    for (let i = 1; i < rows.length; i++) {
+        const labelCell = rows[i].querySelectorAll('th, td')[0];
+        if (labelCell) {
+            labels.push(labelCell.textContent.trim());
+        }
+    }
+    
+    return {
+        labels: labels,
+        datasets: datasets,
+        headers: headers
+    };
+}
+
+// 将HSL颜色转换为十六进制
+function hslToHex(h, s, l) {
+    h /= 360;
+    s /= 100;
+    l /= 100;
+    
+    let r, g, b;
+    if (s === 0) {
+        r = g = b = l;
+    } else {
+        const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+        };
+        
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+    }
+    
+    const toHex = x => {
+        const hex = Math.round(x * 255).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+    };
+    
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// 将十六进制颜色转换为RGBA
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// 渲染图表
+function renderChart(canvas, tableData) {
+    // 检查是否已加载Chart.js
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js not loaded');
+        return;
+    }
+    
+    // 销毁已存在的图表实例（如果存在）
+    if (canvas.chartInstance) {
+        canvas.chartInstance.destroy();
+    }
+    
+    // 创建新的图表配置
+    const config = {
+        type: 'bar', // 默认使用柱状图
+        data: {
+            labels: tableData.labels,
+            datasets: tableData.datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: '数据图表'
+                },
+                legend: {
+                    display: true,
+                    position: 'top',
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    };
+    
+    // 创建图表实例
+    canvas.chartInstance = new Chart(canvas, config);
+}
+
 // 显示"正在输入"提示
 function displayTypingIndicator() {
     let chatIndicator, outputIndicator;
     
     if (outputToggle.checked) {
-        // 如果开关打开，只在页面输出区域显示"正在输入"提示
+        // 如果开关打开，只在图表输出区域显示"正在输入"提示
         outputIndicator = document.createElement('div');
         outputIndicator.classList.add('output-message', 'output-ai-message');
         outputIndicator.textContent = '正在输入...';
