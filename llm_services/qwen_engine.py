@@ -51,6 +51,10 @@ def embed_with_llm(query, base_url=None):
         response.raise_for_status()  # Raise an exception for bad status codes
         
         return response.json()['data'][0]  # Return the embedding vector
+    except requests.exceptions.HTTPError as http_err:
+        print(f'HTTP error during requests POST: {http_err}')
+        print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
+        raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
@@ -156,6 +160,10 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
                         except json.JSONDecodeError:
                             # 如果不是JSON数据，跳过
                             continue
+    except requests.exceptions.HTTPError as http_err:
+        print(f'HTTP error during requests POST: {http_err}')
+        print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
+        raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
@@ -246,6 +254,10 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         response.raise_for_status()  # Raise an exception for bad status codes
         
         return response.json()['choices'][0]['message']['content']  # Return the response text
+    except requests.exceptions.HTTPError as http_err:
+        print(f'HTTP error during requests POST: {http_err}')
+        print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
+        raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
         print(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
