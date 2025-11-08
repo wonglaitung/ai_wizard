@@ -44,12 +44,18 @@ def chat():
         user_message = data.get('message', '')
         chat_history = data.get('history', [])
         settings = data.get('settings', {})
+        output_as_table = data.get('outputAsTable', False)
         
         if not user_message:
             def error_generator():
                 yield 'data: ' + json.dumps({'error': '请输入消息。'}) + '\n\n'
             
             return Response(error_generator(), mimetype='text/event-stream')
+        
+        # 如果需要以表格形式输出，则修改用户消息，添加相关要求
+        if output_as_table:
+            # 在用户消息中添加要求以表格形式输出的指令
+            user_message = f"{user_message}\n\n请以表格的形式组织和呈现您的回答，使用 Markdown 表格格式。"
         
         # 准备传递给模型的参数
         model_params = {
@@ -85,4 +91,4 @@ def chat():
         return Response(error_generator(), mimetype='text/event-stream')
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5002)
+    app.run(debug=True, host='0.0.0.0', port=5003)
