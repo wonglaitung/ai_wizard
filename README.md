@@ -28,7 +28,7 @@
 ### 依赖安装
 
 ```bash
-pip install flask requests pandas openpyxl python-docx
+pip install -r requirements.txt
 ```
 
 ### 环境变量设置
