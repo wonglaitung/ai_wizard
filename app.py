@@ -3,6 +3,13 @@ import sys
 import os
 import json
 import tempfile
+import logging
+
+# 配置日志
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s'
+)
 
 # 将llm_services目录添加到Python路径
 sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
@@ -18,21 +25,30 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
+    app.logger.info('访问根路径 /')
     return send_from_directory('.', 'main.html')
 
 @app.route('/chat')
 def chat_page():
+    app.logger.info('访问 /chat 路径')
     return send_from_directory('.', 'chat.html')
-
-
 
 @app.route('/<path:filename>')
 def static_files(filename):
-    return send_from_directory('.', filename)
+    app.logger.info(f'访问静态文件: {filename}')
+    try:
+        response = send_from_directory('.', filename)
+        app.logger.info(f'成功提供文件: {filename}')
+        return response
+    except Exception as e:
+        app.logger.error(f'提供文件 {filename} 时出错: {str(e)}')
+        raise
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def config():
     """处理AI配置的API端点"""
+    app.logger.info(f'API配置请求 - 方法: {request.method}, 路径: {request.path}')
+    
     if request.method == 'GET':
         # 返回当前配置信息（不包括敏感信息如API密钥）
         config_data = {
@@ -43,12 +59,15 @@ def config():
             'topP': float(os.getenv('QWEN_TOP_P', '0.9')),
             'frequencyPenalty': float(os.getenv('QWEN_FREQUENCY_PENALTY', '0.5'))
         }
+        app.logger.debug(f'返回配置数据: {config_data}')
         return jsonify(config_data)
     
     elif request.method == 'POST':
         # 保存配置信息
         try:
             data = request.json
+            app.logger.debug(f'接收到的配置数据: {data}')
+            
             # 只更新提供的配置项
             if 'modelName' in data:
                 os.environ['QWEN_MODEL_NAME'] = str(data['modelName'])
@@ -65,20 +84,29 @@ def config():
             
             # 注意：API密钥不通过此接口保存到环境变量，以提高安全性
             # 应通过环境变量或安全的配置文件设置
+            app.logger.info('配置保存成功')
             return jsonify({'status': 'success', 'message': '配置已保存'})
         except Exception as e:
+            app.logger.error(f'保存配置时出错: {str(e)}')
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
+    app.logger.info('收到聊天API请求')
+    app.logger.debug(f'请求头: {dict(request.headers)}')
+    
     if chat_with_llm_stream is None:
+        app.logger.error('chat_with_llm_stream 未定义，AI服务不可用')
         def error_generator():
+            app.logger.debug('生成AI服务不可用错误消息')
             yield 'data: ' + json.dumps({'error': '抱歉，AI服务不可用。'}) + '\n\n'
         
         return Response(error_generator(), mimetype='text/event-stream')
     
     try:
         data = request.json
+        app.logger.debug(f'接收到聊天数据: {data}')
+        
         user_message = data.get('message', '')
         file_content = data.get('file_content', '')  # 获取上传的文件内容
         chat_history = data.get('history', [])
@@ -88,8 +116,10 @@ def chat():
         # 如果有文件内容，将其添加到用户消息中
         if file_content:
             user_message = f"请分析以下文件内容：\n\n{file_content}\n\n{user_message}"
+            app.logger.debug('已将文件内容添加到用户消息中')
         
         if not user_message:
+            app.logger.warning('用户消息为空')
             def error_generator():
                 yield 'data: ' + json.dumps({'error': '请输入消息。'}) + '\n\n'
             
@@ -99,6 +129,7 @@ def chat():
         if output_as_table:
             # 在用户消息中添加要求以表格形式输出的指令
             user_message = f"{user_message}\n\n请以表格的形式组织和呈现您的回答，使用 Markdown 表格格式。"
+            app.logger.debug('已添加表格输出要求到用户消息')
         
         # 准备传递给模型的参数
         model_params = {
@@ -112,26 +143,31 @@ def chat():
             'history': chat_history  # 添加聊天历史记录参数
         }
         
+        app.logger.debug(f'准备调用模型，参数: {model_params}')
+        
         # 调用Qwen模型获取流式回复
         def generate():
             try:
+                app.logger.debug('开始调用chat_with_llm_stream函数')
                 for chunk in chat_with_llm_stream(user_message, **model_params):
                     if chunk:
                         yield 'data: ' + json.dumps({'reply': chunk}) + '\n\n'
                 # 发送结束信号
+                app.logger.debug('发送流式响应结束信号')
                 yield 'data: [DONE]\n\n'
             except ValueError as e:
+                app.logger.error(f'ValueError: {str(e)}')
                 if "未提供API密钥" in str(e):
                     yield 'data: ' + json.dumps({'error': '请在配置页面设置有效的API密钥。'}) + '\n\n'
                 else:
-                    print(f"处理聊天请求时出错: {e}")
+                    app.logger.error(f"处理聊天请求时出错: {e}")
                     yield 'data: ' + json.dumps({'error': f'抱歉，处理您的请求时出错：{str(e)}'}) + '\n\n'
             except Exception as e:
-                print(f"处理聊天请求时出错: {e}")
+                app.logger.error(f"处理聊天请求时出错: {e}")
                 # 打印更多错误信息用于调试
                 try:
                     if hasattr(e, 'response') and e.response is not None:
-                        print(f"响应内容: {e.response.text}")
+                        app.logger.error(f"响应内容: {e.response.text}")
                         # 尝试获取更详细的错误信息
                         try:
                             error_detail = e.response.json()
@@ -146,20 +182,21 @@ def chat():
                         error_msg = f'抱歉，处理您的请求时出错：{str(e)}'
                 except Exception as inner_e:
                     # 防止错误处理本身出错
-                    print(f"生成错误消息时出错: {inner_e}")
+                    app.logger.error(f"生成错误消息时出错: {inner_e}")
                     error_msg = '抱歉，处理您的请求时发生未知错误。'
                 
                 yield 'data: ' + json.dumps({'error': error_msg}) + '\n\n'
         
+        app.logger.info('开始发送流式响应')
         return Response(generate(), mimetype='text/event-stream')
     except Exception as e:
-        print(f"处理聊天请求时出错: {e}")
+        app.logger.error(f"处理聊天请求时出错: {e}")
         
         def error_generator():
             try:
                 yield 'data: ' + json.dumps({'error': f'抱歉，处理您的请求时出错：{str(e)}'}) + '\n\n'
             except Exception as inner_e:
-                print(f"生成错误响应时出错: {inner_e}")
+                app.logger.error(f"生成错误响应时出错: {inner_e}")
                 yield 'data: ' + json.dumps({'error': '抱歉，处理您的请求时发生未知错误。'}) + '\n\n'
         
         return Response(error_generator(), mimetype='text/event-stream')
@@ -202,39 +239,50 @@ def extract_text_from_file(filepath, filename):
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """处理文件上传的API端点"""
+    app.logger.info('收到文件上传请求')
+    
     try:
         if 'file' not in request.files:
+            app.logger.warning('请求中没有文件')
             return jsonify({'error': '没有选择文件'}), 400
         
         file = request.files['file']
         
         if file.filename == '':
+            app.logger.warning('文件名为空')
             return jsonify({'error': '没有选择文件'}), 400
         
         if file and allowed_file(file.filename):
+            app.logger.debug(f'开始处理文件: {file.filename}')
             # 创建临时文件
             with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as temp_file:
                 file.save(temp_file.name)
                 temp_filename = temp_file.name
+                app.logger.debug(f'文件已保存到临时位置: {temp_filename}')
             
             try:
                 # 从文件中提取文本内容
                 file_content = extract_text_from_file(temp_filename, file.filename)
+                app.logger.debug(f'文件内容提取成功，长度: {len(file_content)} 字符')
                 
                 # 返回文件内容，以便前端可以将其发送给AI
-                return jsonify({
+                response_data = {
                     'status': 'success',
                     'message': '文件上传成功',
                     'file_content': file_content,
                     'filename': file.filename
-                })
+                }
+                app.logger.debug(f'返回响应数据: {response_data}')
+                return jsonify(response_data)
             finally:
                 # 删除临时文件
                 os.unlink(temp_filename)
+                app.logger.debug(f'临时文件已删除: {temp_filename}')
         else:
+            app.logger.warning(f'不支持的文件类型: {file.filename}')
             return jsonify({'error': '不支持的文件类型'}), 400
     except Exception as e:
-        print(f"处理文件上传时出错: {e}")
+        app.logger.error(f"处理文件上传时出错: {e}")
         return jsonify({'error': f'处理文件上传时出错: {str(e)}'}), 500
 
 if __name__ == '__main__':
