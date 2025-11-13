@@ -190,32 +190,6 @@ def process_data(task_plan, file_content=None):
                         unique_values = df[col].unique().tolist()
                         results[f"{col}_唯一值"] = unique_values
                         
-            elif op_name == "top_team":
-                if actual_column:
-                    # 找出出现次数最多的值
-                    value_counts = df[actual_column].value_counts()
-                    if len(value_counts) > 0:
-                        top_team = value_counts.index[0]
-                        top_count = value_counts.iloc[0]
-                        results[f"{column}_最多团队"] = f"{top_team} ({top_count}个客户)"
-                    else:
-                        results[f"{column}_最多团队"] = "无数据"
-                else:
-                    results[f"{column}_最多团队"] = "列不存在"
-                    
-            elif op_name == "bottom_team":
-                if actual_column:
-                    # 找出出现次数最少的值
-                    value_counts = df[actual_column].value_counts()
-                    if len(value_counts) > 0:
-                        bottom_team = value_counts.index[-1]
-                        bottom_count = value_counts.iloc[-1]
-                        results[f"{column}_最少团队"] = f"{bottom_team} ({bottom_count}个客户)"
-                    else:
-                        results[f"{column}_最少团队"] = "无数据"
-                else:
-                    results[f"{column}_最少团队"] = "列不存在"
-                        
         except Exception as e:
             results[op_name] = f"计算错误: {str(e)}"
     
