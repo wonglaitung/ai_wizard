@@ -430,6 +430,13 @@ async function getAIResponse(userMessage) {
             settings = {...settings, ...JSON.parse(savedSettings)};
         }
         
+        // 检查是否需要使用分步分析（例如，当用户分析数据时）
+        const needsStepByStep = uploadedFileContent !== '' || 
+                               (userMessage.toLowerCase().includes('分析') && 
+                                (userMessage.toLowerCase().includes('数据') || 
+                                 userMessage.toLowerCase().includes('统计') || 
+                                 userMessage.toLowerCase().includes('计算')));
+        
         // 检查输出开关状态，如果打开则添加表格输出要求
         const shouldOutputAsTable = outputToggle && outputToggle.checked;
         
@@ -444,7 +451,8 @@ async function getAIResponse(userMessage) {
                 file_content: uploadedFileContent, // 添加上传的文件内容
                 history: chatHistory,
                 settings: settings,
-                outputAsTable: shouldOutputAsTable
+                outputAsTable: shouldOutputAsTable,
+                stepByStep: needsStepByStep  // 添加分步分析参数
             })
         });
         
@@ -455,7 +463,7 @@ async function getAIResponse(userMessage) {
             
             try {
                 const errorData = JSON.parse(errorText);
-                if (errorData.error) {
+                if (data.error) {
                     // 如果error是一个对象，尝试获取其中的message
                     if (typeof errorData.error === 'object' && errorData.error.message) {
                         errorMessage = `API错误 [${response.status}]: ${errorData.error.message}`;
@@ -506,6 +514,9 @@ async function getAIResponse(userMessage) {
         const decoder = new TextDecoder();
         let done = false;
         let aiReply = '';
+        
+        // 添加用于分步分析的变量
+        let stepResults = {};
         
         while (!done) {
             const { value, done: readerDone } = await reader.read();
@@ -558,7 +569,56 @@ async function getAIResponse(userMessage) {
                                 return;
                             }
                             
-                            if (jsonData.reply) {
+                            // 处理分步分析的响应
+                            if (jsonData.step !== undefined) {
+                                if (jsonData.message) {
+                                    // 显示当前步骤信息
+                                    console.log(`步骤 ${jsonData.step}: ${jsonData.message}`);
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        outputAiMessageElement.textContent = `步骤 ${jsonData.step}: ${jsonData.message}\n${aiReply}`;
+                                    } else if (aiMessageElement) {
+                                        aiMessageElement.textContent = `步骤 ${jsonData.step}: ${jsonData.message}\n${aiReply}`;
+                                    }
+                                }
+                                
+                                if (jsonData.result) {
+                                    // 保存该步骤的结果
+                                    stepResults[jsonData.step] = jsonData.result;
+                                    
+                                    // 记录步骤完成信息
+                                    console.log(`步骤 ${jsonData.step} 完成`);
+                                    
+                                    // 如果是最后一步，将结果添加到最终回复中
+                                    if (jsonData.step === 3) {
+                                        aiReply = jsonData.result;
+                                        console.log('分步分析完成，显示最终报告');
+                                        if (outputToggle.checked && outputAiMessageElement) {
+                                            if (typeof marked !== 'undefined') {
+                                                outputAiMessageElement.innerHTML = marked.parse(aiReply);
+                                            } else {
+                                                outputAiMessageElement.textContent = aiReply;
+                                            }
+                                            outputMessages.scrollTop = outputMessages.scrollHeight;
+                                        } else if (aiMessageElement) {
+                                            if (typeof marked !== 'undefined') {
+                                                aiMessageElement.innerHTML = marked.parse(aiReply);
+                                            } else {
+                                                aiMessageElement.textContent = aiReply;
+                                            }
+                                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                                        }
+                                    } else {
+                                        // 显示当前步骤的进度
+                                        if (outputToggle.checked && outputAiMessageElement) {
+                                            outputAiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
+                                        } else if (aiMessageElement) {
+                                            aiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
+                                        }
+                                    }
+                                }
+                            } 
+                            // 处理传统响应
+                            else if (jsonData.reply) {
                                 aiReply += jsonData.reply;
                                 
                                 // 根据开关状态更新相应的消息元素
