@@ -4,6 +4,8 @@
 
 这是一个基于 Flask 的 Web 应用程序，名为"AI数据透视助手"。该应用提供了一个功能丰富的 AI 对话界面，包括可折叠对话框、文件上传分析、图表数据可视化等功能。用户可以通过左侧菜单切换"新对话"和"配置"页面，与 Qwen 大语言模型进行交互。该应用支持流式响应，使 AI 的回复能够逐字显示，并具备强大的数据可视化功能。
 
+应用现在支持智能数据分析功能，用户可以上传数据文件并请求AI进行特定的数据分析任务。系统会自动规划分析任务、处理数据并生成专业的分析报告。
+
 ## 项目结构
 
 ```
@@ -21,7 +23,10 @@
 ├── docker/
 │   └── Dockerfile         # Docker构建文件
 ├── llm_services/
-│   └── qwen_engine.py     # Qwen 模型接口
+│   ├── analysis_planner.py # 数据分析任务规划器
+│   ├── data_processor.py   # 数据处理模块
+│   ├── qwen_engine.py      # Qwen 模型接口
+│   └── report_generator.py # 分析报告生成器
 └── scripts/
     ├── chart.js           # Chart.js 图表库
     ├── marked.min.js      # Markdown解析库
@@ -40,6 +45,7 @@
 8. **Markdown 支持**：对话框和对话区域支持 Markdown 格式渲染。
 9. **图表输出模式**：可切换到专门的图表输出模式，支持数据表格的可视化展示。
 10. **聊天历史**：支持聊天历史记录和上下文对话。
+11. **智能数据分析**：支持上传数据文件并进行智能分析，包括任务规划、数据处理和报告生成。
 
 ## 技术栈
 
@@ -126,6 +132,22 @@ Flask 应用的主文件，负责：
 - 使用 SSE (Server-Sent Events) 实现流式响应
 - 实现文件上传处理和格式转换功能
 - 添加日志记录功能
+- 实现智能数据分析功能，包括分步处理流程
+
+### `llm_services/analysis_planner.py`
+
+数据分析任务规划器模块，负责：
+
+- 使用大模型将用户的数据分析请求转换为具体的计算任务
+- 生成包含任务类型、列名、操作和预期输出的任务计划
+
+### `llm_services/data_processor.py`
+
+数据处理模块，负责：
+
+- 根据任务计划执行具体的数据处理操作
+- 支持多种统计计算（平均值、总和、最大值、最小值等）
+- 处理多种文件格式的数据
 
 ### `llm_services/qwen_engine.py`
 
@@ -136,6 +158,13 @@ Qwen 模型的接口文件，包含：
 - `embed_with_llm`：用于生成文本嵌入的函数
 - 支持聊天历史记录、参数验证和错误处理
 - 支持自定义 API 基础 URL
+
+### `llm_services/report_generator.py`
+
+分析报告生成器模块，负责：
+
+- 整合计算结果并生成最终分析报告
+- 使用大模型生成专业的数据分析报告
 
 ### `main.html`
 
@@ -176,6 +205,7 @@ Qwen 模型的接口文件，包含：
 - AI 模型参数配置和本地存储
 - 聊天历史记录管理
 - 图表类型切换和导出功能
+- 智能数据分析的前端交互
 
 ### `scripts/chart.js`
 
@@ -198,12 +228,22 @@ marked.js Markdown 解析库，用于将 Markdown 格式文本转换为 HTML。
     "file_content": "上传的文件内容（可选）",
     "history": "聊天历史记录（可选）",
     "settings": "AI模型配置参数（可选）",
-    "outputAsTable": "是否以表格形式输出（可选，默认false）"
+    "outputAsTable": "是否以表格形式输出（可选，默认false）",
+    "stepByStep": "是否使用分步分析（可选，默认false）"
   }
   ```
 - **响应**：SSE 流，包含 AI 的回复片段
   ```json
   data: {"reply": "AI回复的片段"}
+  ```
+- **分步分析响应**：
+  ```json
+  data: {"step": 1, "message": "正在规划分析任务..."}
+  data: {"step": 1, "result": {...}}
+  data: {"step": 2, "message": "正在处理数据..."}
+  data: {"step": 2, "result": {...}}
+  data: {"step": 3, "message": "正在生成分析报告..."}
+  data: {"step": 3, "result": "..."}
   ```
 
 ### `/api/config`
@@ -243,3 +283,4 @@ marked.js Markdown 解析库，用于将 Markdown 格式文本转换为 HTML。
 - 支持 Markdown 渲染
 - 实现了图表数据可视化功能
 - 支持文件上传和内容分析
+- 实现了智能数据分析功能，包括任务规划、数据处理和报告生成的完整流程
