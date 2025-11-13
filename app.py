@@ -17,8 +17,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
 # 导入qwen_engine模块
 try:
     from llm_services.qwen_engine import chat_with_llm_stream
+    from llm_services.analysis_planner import plan_analysis_task
+    from llm_services.data_processor import process_data
+    from llm_services.report_generator import generate_report
 except ImportError as e:
-    print(f"导入qwen_engine时出错: {e}")
+    print(f"导入llm_services模块时出错: {e}")
     chat_with_llm_stream = None
 
 app = Flask(__name__)
@@ -112,6 +115,11 @@ def chat():
         chat_history = data.get('history', [])
         settings = data.get('settings', {})
         output_as_table = data.get('outputAsTable', False)
+        step_by_step = data.get('stepByStep', False)  # 是否使用分步分析
+        
+        # 如果需要分步分析，调用分步分析处理函数
+        if step_by_step:
+            return step_by_step_analysis(user_message, file_content, settings)
         
         # 如果有文件内容，将其添加到用户消息中
         if file_content:
@@ -200,6 +208,69 @@ def chat():
                 yield 'data: ' + json.dumps({'error': '抱歉，处理您的请求时发生未知错误。'}) + '\n\n'
         
         return Response(error_generator(), mimetype='text/event-stream')
+
+
+def step_by_step_analysis(user_message, file_content, settings):
+    """
+    分步分析处理函数
+    
+    Args:
+        user_message (str): 用户消息
+        file_content (str): 文件内容
+        settings (dict): 设置参数
+        
+    Returns:
+        Response: 流式响应
+    """
+    app.logger.info('开始分步分析处理')
+    
+    def generate():
+        try:
+            app.logger.info('开始步骤1: 任务规划')
+            # 步骤1: 任务规划
+            yield 'data: ' + json.dumps({'step': 1, 'message': '正在规划分析任务...'}) + '\n\n'
+            # 获取API密钥并传递给任务规划函数
+            api_key = settings.get('apiKey') or os.getenv('QWEN_API_KEY')
+            task_plan = plan_analysis_task(user_message, file_content, api_key)
+            app.logger.info(f'步骤1完成: 任务规划结果 {task_plan}')
+            yield 'data: ' + json.dumps({'step': 1, 'result': task_plan}) + '\n\n'
+            
+            app.logger.info('开始步骤2: 数据处理')
+            # 步骤2: 数据处理
+            yield 'data: ' + json.dumps({'step': 2, 'message': '正在处理数据...'}) + '\n\n'
+            computation_results = process_data(task_plan, file_content)
+            app.logger.info(f'步骤2完成: 数据处理结果 {computation_results}')
+            yield 'data: ' + json.dumps({'step': 2, 'result': computation_results}) + '\n\n'
+            
+            app.logger.info('开始步骤3: 报告生成')
+            # 步骤3: 报告生成
+            yield 'data: ' + json.dumps({'step': 3, 'message': '正在生成分析报告...'}) + '\n\n'
+            
+            # 准备传递给模型的参数
+            model_params = {
+                'model': settings.get('modelName', 'qwen-max'),
+                'temperature': settings.get('temperature', 0.5),
+                'max_tokens': settings.get('maxTokens', 8196),
+                'top_p': settings.get('topP', 0.9),
+                'frequency_penalty': settings.get('frequencyPenalty', 0.5),
+                'api_key': settings.get('apiKey') or os.getenv('QWEN_API_KEY'),
+                'base_url': settings.get('baseUrl', None)
+            }
+            
+            # 生成报告
+            api_key = settings.get('apiKey') or os.getenv('QWEN_API_KEY')
+            report = generate_report(task_plan, computation_results, api_key)
+            app.logger.info(f'步骤3完成: 报告生成结果 {report[:100]}...')  # 只记录前100个字符以避免日志过长
+            yield 'data: ' + json.dumps({'step': 3, 'result': report}) + '\n\n'
+            
+            # 发送结束信号
+            app.logger.info('分步分析流程完成')
+            yield 'data: [DONE]\n\n'
+        except Exception as e:
+            app.logger.error(f"分步分析处理时出错: {e}")
+            yield 'data: ' + json.dumps({'error': f'分步分析处理时出错：{str(e)}'}) + '\n\n'
+    
+    return Response(generate(), mimetype='text/event-stream')
 
 # 支持的文件类型
 ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'docx'}
