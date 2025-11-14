@@ -31,11 +31,6 @@ def index():
     app.logger.info('访问根路径 /')
     return send_from_directory('.', 'main.html')
 
-@app.route('/chat')
-def chat_page():
-    app.logger.info('访问 /chat 路径')
-    return send_from_directory('.', 'chat.html')
-
 @app.route('/<path:filename>')
 def static_files(filename):
     app.logger.info(f'访问静态文件: {filename}')
@@ -294,8 +289,15 @@ def extract_text_from_file(filepath, filename):
         return df.to_string()
     elif file_extension in ['xlsx']:
         import pandas as pd
-        df = pd.read_excel(filepath)
-        return df.to_string()
+        # 读取所有工作表
+        all_sheets = pd.read_excel(filepath, sheet_name=None)
+        # 将所有工作表连接成一个字符串
+        sheet_strings = []
+        for sheet_name, df in all_sheets.items():
+            sheet_strings.append(f"工作表: {sheet_name}")
+            sheet_strings.append(df.to_string())
+            sheet_strings.append("")  # 添加空行分隔
+        return "\n".join(sheet_strings)
     elif file_extension == 'docx':
         from docx import Document
         doc = Document(filepath)
