@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 数据处理器模块
-用于执行具体的Python计算任务
+用于执行从商业角度透视数据的具体计算任务
 """
 
 import pandas as pd
@@ -80,7 +80,7 @@ def parse_multi_sheet_data(text_data):
 
 def process_data(task_plan, file_content=None):
     """
-    根據任務計劃執行數據處理
+    根據任務計劃執行數據處理，從商業角度透視數據
     
     Args:
         task_plan (dict): 任務計劃
@@ -445,7 +445,7 @@ def process_data(task_plan, file_content=None):
 @register_operation("mean")
 def mean_operation(df, columns):
     """
-    计算平均值操作
+    计算平均值操作，用于了解业务指标的平均水平
     
     Args:
         df: DataFrame
@@ -477,7 +477,7 @@ def mean_operation(df, columns):
 @register_operation("sum")
 def sum_operation(df, columns):
     """
-    计算总和操作
+    计算总和操作，用于了解业务指标的总体规模
     
     Args:
         df: DataFrame
@@ -509,7 +509,7 @@ def sum_operation(df, columns):
 @register_operation("max")
 def max_operation(df, columns):
     """
-    计算最大值操作
+    计算最大值操作，用于识别业务中的峰值表现
     
     Args:
         df: DataFrame
@@ -541,7 +541,7 @@ def max_operation(df, columns):
 @register_operation("min")
 def min_operation(df, columns):
     """
-    计算最小值操作
+    计算最小值操作，用于识别业务中的最低表现
     
     Args:
         df: DataFrame
@@ -573,7 +573,7 @@ def min_operation(df, columns):
 @register_operation("count")
 def count_operation(df, columns):
     """
-    计算计数操作
+    计算计数操作，用于了解数据覆盖范围
     
     Args:
         df: DataFrame
@@ -604,7 +604,7 @@ def count_operation(df, columns):
 @register_operation("percentage")
 def percentage_operation(df, columns):
     """
-    计算百分比操作
+    计算百分比操作，用于分析业务构成比例
     
     Args:
         df: DataFrame
@@ -639,7 +639,7 @@ def percentage_operation(df, columns):
 @register_operation("std")
 def std_operation(df, columns):
     """
-    计算标准差操作
+    计算标准差操作，用于评估业务指标的波动性
     
     Args:
         df: DataFrame
@@ -671,7 +671,7 @@ def std_operation(df, columns):
 @register_operation("unique")
 def unique_operation(df, columns):
     """
-    计算唯一值操作
+    计算唯一值操作，用于了解业务分类的多样性
     
     Args:
         df: DataFrame
@@ -695,7 +695,7 @@ def unique_operation(df, columns):
 @register_operation("median")
 def median_operation(df, columns):
     """
-    计算中位数操作
+    计算中位数操作，用于了解业务指标的中间水平
     
     Args:
         df: DataFrame
@@ -727,7 +727,7 @@ def median_operation(df, columns):
 @register_operation("mode")
 def mode_operation(df, columns):
     """
-    计算众数操作
+    计算众数操作，用于识别最常见的业务情况
     
     Args:
         df: DataFrame
@@ -751,7 +751,7 @@ def mode_operation(df, columns):
 @register_operation("variance")
 def variance_operation(df, columns):
     """
-    计算方差操作
+    计算方差操作，用于评估业务指标的离散程度
     
     Args:
         df: DataFrame
@@ -783,7 +783,7 @@ def variance_operation(df, columns):
 @register_operation("quantile_25")
 def quantile_25_operation(df, columns):
     """
-    计算25%分位数操作
+    计算25%分位数操作，用于了解业务指标的低分段表现
     
     Args:
         df: DataFrame
@@ -815,7 +815,7 @@ def quantile_25_operation(df, columns):
 @register_operation("quantile_75")
 def quantile_75_operation(df, columns):
     """
-    计算75%分位数操作
+    计算75%分位数操作，用于了解业务指标的高分段表现
     
     Args:
         df: DataFrame
@@ -847,7 +847,7 @@ def quantile_75_operation(df, columns):
 @register_operation("range")
 def range_operation(df, columns):
     """
-    计算数值范围（最大值-最小值）操作
+    计算数值范围（最大值-最小值）操作，用于了解业务指标的波动区间
     
     Args:
         df: DataFrame
@@ -881,7 +881,7 @@ def range_operation(df, columns):
 @register_operation("first")
 def first_operation(df, columns):
     """
-    获取第一行数据操作
+    获取第一行数据操作，用于了解业务的起始状态
     
     Args:
         df: DataFrame
@@ -910,7 +910,7 @@ def first_operation(df, columns):
 @register_operation("last")
 def last_operation(df, columns):
     """
-    获取最后一行数据操作
+    获取最后一行数据操作，用于了解业务的最新状态
     
     Args:
         df: DataFrame
@@ -939,7 +939,7 @@ def last_operation(df, columns):
 @register_operation("missing_count")
 def missing_count_operation(df, columns):
     """
-    计算缺失值数量操作
+    计算缺失值数量操作，用于评估数据完整性
     
     Args:
         df: DataFrame
@@ -963,7 +963,7 @@ def missing_count_operation(df, columns):
 @register_operation("missing_percentage")
 def missing_percentage_operation(df, columns):
     """
-    计算缺失值百分比操作
+    计算缺失值百分比操作，用于评估数据质量
     
     Args:
         df: DataFrame
@@ -992,7 +992,7 @@ def missing_percentage_operation(df, columns):
 @register_operation("correlation")
 def correlation_operation(df, columns):
     """
-    计算数值列之间的相关性矩阵操作
+    计算数值列之间的相关性矩阵操作，用于识别业务指标间的关联性
     
     Args:
         df: DataFrame
