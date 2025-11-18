@@ -256,7 +256,9 @@ def step_by_step_analysis(user_message, file_content, settings):
             api_key = settings.get('apiKey') or os.getenv('QWEN_API_KEY')
             report = generate_report(task_plan, computation_results, api_key)
             app.logger.info(f'步骤3完成: 报告生成结果 {report[:100]}...')  # 只记录前100个字符以避免日志过长
-            yield 'data: ' + json.dumps({'step': 3, 'result': report}) + '\n\n'
+            # 确保报告内容是有效的JSON字符串
+            safe_report = report if report and isinstance(report, str) else "未能生成分析报告"
+            yield 'data: ' + json.dumps({'step': 3, 'result': safe_report}) + '\n\n'
             
             # 发送结束信号
             app.logger.info('分步分析流程完成')
