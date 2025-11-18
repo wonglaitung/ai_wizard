@@ -114,7 +114,7 @@ def chat():
         
         # 如果需要分步分析，调用分步分析处理函数
         if step_by_step:
-            return step_by_step_analysis(user_message, file_content, settings)
+            return step_by_step_analysis(user_message, file_content, settings, output_as_table)
         
         # 如果有文件内容，将其添加到用户消息中
         if file_content:
@@ -205,7 +205,7 @@ def chat():
         return Response(error_generator(), mimetype='text/event-stream')
 
 
-def step_by_step_analysis(user_message, file_content, settings):
+def step_by_step_analysis(user_message, file_content, settings, output_as_table=False):
     """
     分步分析处理函数
     
@@ -213,6 +213,7 @@ def step_by_step_analysis(user_message, file_content, settings):
         user_message (str): 用户消息
         file_content (str): 文件内容
         settings (dict): 设置参数
+        output_as_table (bool): 是否以表格形式输出
         
     Returns:
         Response: 流式响应
@@ -254,7 +255,7 @@ def step_by_step_analysis(user_message, file_content, settings):
             
             # 生成报告
             api_key = settings.get('apiKey') or os.getenv('QWEN_API_KEY')
-            report = generate_report(task_plan, computation_results, api_key)
+            report = generate_report(task_plan, computation_results, api_key, output_as_table)
             app.logger.info(f'步骤3完成: 报告生成结果 {report[:100]}...')  # 只记录前100个字符以避免日志过长
             # 确保报告内容是有效的JSON字符串
             safe_report = report if report and isinstance(report, str) else "未能生成分析报告"
