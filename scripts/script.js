@@ -548,6 +548,12 @@ async function getAIResponse(userMessage) {
                         }
                         
                         try {
+                            // 首先检查data是否为空或不完整
+                            if (!data || data.trim() === '') {
+                                console.warn('收到空的JSON数据，跳过处理');
+                                continue;
+                            }
+                            
                             const jsonData = JSON.parse(data);
                             
                             if (jsonData.error) {
@@ -639,7 +645,24 @@ async function getAIResponse(userMessage) {
                                 }
                             }
                         } catch (e) {
-                            console.error('Error parsing JSON:', e);
+                            console.error('Error parsing JSON:', e, 'Raw data:', data);
+                            // 尝试解析数据中的错误信息
+                            if (data && data.includes('error')) {
+                                try {
+                                    // 尝试从可能的部分JSON中提取错误信息
+                                    const errorMatch = data.match(/"error"[^}]*"([^"]*)"/);
+                                    if (errorMatch) {
+                                        const errorMessage = errorMatch[1];
+                                        if (outputToggle.checked && outputAiMessageElement) {
+                                            outputAiMessageElement.textContent = `错误: ${errorMessage}`;
+                                        } else if (aiMessageElement) {
+                                            aiMessageElement.textContent = `错误: ${errorMessage}`;
+                                        }
+                                    }
+                                } catch (innerError) {
+                                    console.error('无法从错误数据中提取错误信息:', innerError);
+                                }
+                            }
                         }
                     }
                 }
