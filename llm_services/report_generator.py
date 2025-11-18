@@ -6,7 +6,7 @@
 
 from .qwen_engine import chat_with_llm
 
-def generate_report(task_plan, computation_results, api_key=None):
+def generate_report(task_plan, computation_results, api_key=None, output_as_table=False):
     """
     生成业务数据透视分析报告
     
@@ -14,6 +14,7 @@ def generate_report(task_plan, computation_results, api_key=None):
         task_plan (dict): 原始任务计划
         computation_results (dict): 计算结果
         api_key (str): API密钥
+        output_as_table (bool): 是否以表格形式输出
         
     Returns:
         str: 生成的分析报告
@@ -27,6 +28,11 @@ def generate_report(task_plan, computation_results, api_key=None):
     if not api_key:
         return "生成报告时出错: 未提供API密钥"
     
+    # 根据output_as_table参数决定是否要求表格格式
+    table_instruction = ""
+    if output_as_table:
+        table_instruction = "在报告中，如有可能，请使用表格来组织和呈现数据，以支持业务数据透视和洞察分析。表格应清晰展示关键指标和对比信息，便于进行图表可视化。\n"
+    
     # 构建提示词，更侧重于业务数据透视和洞察
     prompt = f"""
 你是一个专业的业务数据分析师，专门从事数据透视和业务洞察分析。请根据以下信息生成一份专业的业务分析报告。
@@ -37,6 +43,7 @@ def generate_report(task_plan, computation_results, api_key=None):
 计算结果:
 {computation_results}
 
+{table_instruction}
 请根据以上计算结果，生成一份专业的业务数据透视分析报告，重点关注：
 1. 业务指标表现：从商业角度解释数据含义
 2. 关键业务发现：识别重要的业务趋势、模式或异常
