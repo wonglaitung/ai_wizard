@@ -463,14 +463,14 @@ async function getAIResponse(userMessage) {
             
             try {
                 const errorData = JSON.parse(errorText);
-                if (data.error) {
+                if (errorData && errorData.error) {
                     // 如果error是一个对象，尝试获取其中的message
                     if (typeof errorData.error === 'object' && errorData.error.message) {
                         errorMessage = `API错误 [${response.status}]: ${errorData.error.message}`;
                     } else {
                         errorMessage = `API错误 [${response.status}]: ${errorData.error}`;
                     }
-                } else if (errorData.message) {
+                } else if (errorData && errorData.message) {
                     errorMessage = `API错误 [${response.status}]: ${errorData.message}`;
                 }
             } catch (e) {
