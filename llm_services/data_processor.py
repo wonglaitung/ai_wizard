@@ -266,7 +266,7 @@ def process_data(task_plan, file_content=None):
     operations = task_plan.get("operations", [])
     for op in operations:
         op_column = op.get("column")
-        if op_column:
+        if op_column and not isinstance(op_column, (dict, list)):  # 只添加简单类型的列名
             operation_columns.append(op_column)
     
     # 合并任务计划列和操作列
@@ -303,9 +303,9 @@ def process_data(task_plan, file_content=None):
                 # 确定使用哪个数据框
                 current_df = multi_sheet_data.get(sheet_name, df) if sheet_name else df
                 
-                # 尝试匹配列名
+                # 尝试匹配列名（只对字符串类型的列名进行匹配）
                 actual_column = None
-                if column:
+                if column and isinstance(column, str):
                     # 首先尝试精确匹配（忽略空格）
                     stripped_column = column.strip()
                     for col in current_df.columns:
@@ -320,7 +320,7 @@ def process_data(task_plan, file_content=None):
                                 actual_column = col
                                 break
                 
-                if column and not actual_column:
+                if column and not actual_column and isinstance(column, str):
                     column_ref = f"{sheet_name}.{column}" if sheet_name else column
                     results[f"{op_name}_{column_ref}"] = f"错误：列 '{column_ref}' 不存在"
                     continue
@@ -328,25 +328,30 @@ def process_data(task_plan, file_content=None):
                 # 使用注册的操作处理函数
                 if op_name in OPERATION_REGISTRY:
                     operation_func = OPERATION_REGISTRY[op_name]
-                    operation_result = operation_func(current_df, actual_column if actual_column else current_df.columns.tolist())
+                    
+                    # 检查是否需要复杂参数（如字典或列表）
+                    if isinstance(column, (dict, list)) and op_name in ['group_by', 'pivot_table', 'cross_tab', 'aggregate']:
+                        # 对于需要复杂参数的操作，传递原始参数
+                        operation_result = operation_func(current_df, column)
+                    else:
+                        # 对于普通操作，传递匹配到的列名
+                        operation_result = operation_func(current_df, actual_column if actual_column else current_df.columns.tolist())
                     
                     # 根据操作结果更新results字典
                     column_ref = f"{sheet_name}.{column}" if sheet_name and column else (column or "all")
-                    if actual_column:
+                    if actual_column and not isinstance(column, (dict, list)):
                         # 如果指定了具体列，则添加列名前缀
                         if isinstance(operation_result, dict):
                             results[f"{column_ref}_"] = operation_result
                         else:
                             results[f"{column_ref}_{op_name}"] = operation_result
                     else:
-                        # 如果没有指定列，则对所有列应用操作
+                        # 如果没有指定列或使用了复杂参数，则使用操作名作为前缀
                         if isinstance(operation_result, dict):
                             results.update(operation_result)
                         else:
-                            # 如果返回单个值，对所有列进行处理
-                            for col in current_df.columns:
-                                col_ref = f"{sheet_name}.{col}" if sheet_name else col
-                                results[f"{col_ref}_{op_name}"] = operation_result
+                            # 如果返回单个值，使用操作名存储
+                            results[f"{op_name}_result"] = operation_result
                 else:
                     # 如果操作未注册，返回错误信息
                     results[f"{op_name}_error"] = f"不支持的操作: {op_name}，请使用以下操作之一: {list(OPERATION_REGISTRY.keys())}"
@@ -382,9 +387,9 @@ def process_data(task_plan, file_content=None):
                 op_name = op.get("name")
                 column = op.get("column")
                 
-                # 尝试匹配列名
+                # 尝试匹配列名（只对字符串类型的列名进行匹配）
                 actual_column = None
-                if column:
+                if column and isinstance(column, str):
                     # 首先尝试精确匹配（忽略空格）
                     stripped_column = column.strip()
                     for col in df.columns:
@@ -399,30 +404,36 @@ def process_data(task_plan, file_content=None):
                                 actual_column = col
                                 break
                 
-                if column and not actual_column:
+                if column and not actual_column and isinstance(column, str):
                     results[f"{op_name}_{column}"] = f"错误：列 '{column}' 不存在"
                     continue
                     
                 # 使用注册的操作处理函数
                 if op_name in OPERATION_REGISTRY:
                     operation_func = OPERATION_REGISTRY[op_name]
-                    operation_result = operation_func(df, actual_column if actual_column else df.columns.tolist())
+                    
+                    # 检查是否需要复杂参数（如字典或列表）
+                    if isinstance(column, (dict, list)) and op_name in ['group_by', 'pivot_table', 'cross_tab', 'aggregate']:
+                        # 对于需要复杂参数的操作，传递原始参数
+                        operation_result = operation_func(df, column)
+                    else:
+                        # 对于普通操作，传递匹配到的列名
+                        operation_result = operation_func(df, actual_column if actual_column else df.columns.tolist())
                     
                     # 根据操作结果更新results字典
-                    if actual_column:
+                    if actual_column and not isinstance(column, (dict, list)):
                         # 如果指定了具体列，则添加列名前缀
                         if isinstance(operation_result, dict):
                             results[f"{column}_"] = operation_result
                         else:
                             results[f"{column}_{op_name}"] = operation_result
                     else:
-                        # 如果没有指定列，则对所有列应用操作
+                        # 如果没有指定列或使用了复杂参数，则使用操作名作为前缀
                         if isinstance(operation_result, dict):
                             results.update(operation_result)
                         else:
-                            # 如果返回单个值，对所有列进行处理
-                            for col in df.columns:
-                                results[f"{col}_{op_name}"] = operation_result
+                            # 如果返回单个值，使用操作名存储
+                            results[f"{op_name}_result"] = operation_result
                 else:
                     # 如果操作未注册，返回错误信息
                     results[f"{op_name}_error"] = f"不支持的操作: {op_name}，请使用以下操作之一: {list(OPERATION_REGISTRY.keys())}"
