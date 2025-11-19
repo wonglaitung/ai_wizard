@@ -139,12 +139,19 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
             'enable_thinking': enable_thinking  # 使用传入的参数
         }
         
+        # 打印用户提示词
+        print(f"[LLM CALL] Calling model: {model} with query: {query}")
+        
         # 构建完整的API URL
         api_url = f"{base_url}/chat/completions"
         response = requests.post(api_url, headers=headers, json=payload, stream=True)
         response.raise_for_status()  # Raise an exception for bad status codes
         
+        # 打印用户提示词
+        print(f"[LLM CALL] Calling model: {model} with query: {query}")
+        
         # 处理流式响应
+        full_response = ""
         for line in response.iter_lines():
             if line:
                 decoded_line = line.decode('utf-8')
@@ -156,10 +163,14 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
                             if 'choices' in json_data and len(json_data['choices']) > 0:
                                 delta = json_data['choices'][0].get('delta', {})
                                 if 'content' in delta:
-                                    yield delta['content']
+                                    content = delta['content']
+                                    full_response += content
+                                    yield content
                         except json.JSONDecodeError:
                             # 如果不是JSON数据，跳过
                             continue
+        # 打印完整响应
+        print(f"[LLM RESPONSE] Model {model} response: {full_response[:200]}{'...' if len(full_response) > 200 else ''}")
     except requests.exceptions.HTTPError as http_err:
         print(f'HTTP error during requests POST: {http_err}')
         print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
@@ -248,12 +259,20 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
             'enable_thinking': enable_thinking  # 使用传入的参数
         }
         
+        # 打印用户提示词
+        print(f"[LLM CALL] Calling model: {model} with query: {query}")
+        
         # 构建完整的API URL
         api_url = f"{base_url}/chat/completions"
         response = requests.post(api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for bad status codes
         
-        return response.json()['choices'][0]['message']['content']  # Return the response text
+        result = response.json()['choices'][0]['message']['content']  # Return the response text
+        
+        # 打印响应
+        print(f"[LLM RESPONSE] Model {model} response: {result[:200]}{'...' if len(result) > 200 else ''}")
+        
+        return result
     except requests.exceptions.HTTPError as http_err:
         print(f'HTTP error during requests POST: {http_err}')
         print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
