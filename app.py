@@ -16,11 +16,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
 
 # 导入LangGraph和相关模块
 try:
-    from langgraph_services.analysis_graph import AnalysisState, analysis_graph
+    from langgraph_services.analysis_graph import AnalysisState, ChatState, analysis_graph, chat_graph, conditional_graph_executor
     from llm_services.qwen_engine import chat_with_llm_stream
 except ImportError as e:
     print(f"导入LangGraph或llm_services模块时出错: {e}")
     analysis_graph = None
+    chat_graph = None
+    conditional_graph_executor = None
     chat_with_llm_stream = None
 
 app = Flask(__name__)
@@ -92,8 +94,8 @@ def chat():
     app.logger.info('收到聊天API请求')
     app.logger.debug(f'请求头: {dict(request.headers)}')
     
-    if analysis_graph is None:
-        app.logger.error('analysis_graph 未定义，LangGraph服务不可用')
+    if conditional_graph_executor is None:
+        app.logger.error('conditional_graph_executor 未定义，LangGraph服务不可用')
         def error_generator():
             app.logger.debug('生成LangGraph服务不可用错误消息')
             yield 'data: ' + json.dumps({'error': '抱歉，LangGraph服务不可用。'}) + '\n\n'
@@ -111,6 +113,12 @@ def chat():
         output_as_table = data.get('outputAsTable', False)
         step_by_step = data.get('stepByStep', False)  # 是否使用分步分析
         
+        # 输入验证
+        if not user_message and not file_content:
+            def error_generator():
+                yield 'data: ' + json.dumps({'error': '消息内容不能为空。'}) + '\n\n'
+            return Response(error_generator(), mimetype='text/event-stream')
+        
         # 准备初始状态
         initial_state: AnalysisState = {
             "user_message": user_message,
@@ -123,15 +131,18 @@ def chat():
             "final_report": None,
             "current_step": "initial",
             "error": None,
-            "api_key": settings.get('apiKey') or os.getenv('QWEN_API_KEY')
+            "api_key": settings.get('apiKey') or os.getenv('QWEN_API_KEY'),
+            "processed": False
         }
         
-        # 如果需要分步分析，使用LangGraph处理
-        if step_by_step or file_content:
-            return run_langgraph_step_by_step(initial_state)
-        else:
-            # 对于普通聊天，也使用LangGraph进行处理
-            return run_langgraph_chat(initial_state)
+        # 使用条件图执行器来决定使用哪个流程
+        return run_conditional_graph(initial_state)
+    except ValueError as ve:
+        # 处理请求数据验证错误
+        app.logger.error(f"请求数据验证错误: {ve}")
+        def error_generator():
+            yield 'data: ' + json.dumps({'error': f'请求数据格式错误：{str(ve)}'}) + '\n\n'
+        return Response(error_generator(), mimetype='text/event-stream')
     except Exception as e:
         app.logger.error(f"处理聊天请求时出错: {e}")
         
@@ -145,9 +156,148 @@ def chat():
         return Response(error_generator(), mimetype='text/event-stream')
 
 
+def run_conditional_graph(initial_state: AnalysisState):
+    """
+    使用条件图执行器运行适当的流程
+    
+    Args:
+        initial_state (AnalysisState): 初始状态
+        
+    Returns:
+        Response: 流式响应
+    """
+    app.logger.info('开始LangGraph条件路由处理')
+    
+    # 检查是否需要分步分析
+    needs_step_by_step = (
+        initial_state.get("file_content") and initial_state["file_content"] != '' or
+        any(keyword in initial_state["user_message"].lower() for keyword in 
+            ['分析', '统计', '计算', '数据透视', '报表', '趋势', '对比', '步骤', 'step by step'])
+    )
+    
+    if needs_step_by_step:
+        # 对于分步分析，使用分析图并流式输出中间结果
+        return run_analysis_with_streaming(initial_state)
+    else:
+        # 对于普通聊天，使用聊天图
+        return run_chat_with_streaming(initial_state)
+
+
+def run_analysis_with_streaming(initial_state: AnalysisState):
+    """
+    使用分析图并流式输出中间结果
+    
+    Args:
+        initial_state (AnalysisState): 初始状态
+        
+    Returns:
+        Response: 流式响应
+    """
+    app.logger.info('开始LangGraph分析流程（流式输出）')
+    
+    def generate():
+        try:
+            # 发送每个步骤的开始消息
+            yield 'data: ' + json.dumps({'step': 1, 'message': '正在规划分析任务...'}) + '\n\n'
+            
+            # 直接使用LangGraph的流API来获取中间结果
+            for output in analysis_graph.stream(initial_state):
+                # 输出是一个字典，键是节点名称，值是该节点的输出状态
+                for node_name, state in output.items():
+                    app.logger.info(f'节点 {node_name} 完成，状态: {state.get("current_step", "unknown")}')
+                    
+                    # 根据节点类型发送适当的响应
+                    if node_name == "plan_analysis":
+                        task_plan = state.get("task_plan")
+                        if task_plan:
+                            yield 'data: ' + json.dumps({'step': 1, 'result': task_plan.dict() if hasattr(task_plan, 'dict') else task_plan}) + '\n\n'
+                            yield 'data: ' + json.dumps({'step': 2, 'message': '正在处理数据...'}) + '\n\n'  # 提前发送下一步消息
+                    elif node_name == "process_data":
+                        computation_results = state.get("computation_results")
+                        if computation_results:
+                            yield 'data: ' + json.dumps({'step': 2, 'result': computation_results}) + '\n\n'
+                            yield 'data: ' + json.dumps({'step': 3, 'message': '正在生成分析报告...'}) + '\n\n'  # 提前发送下一步消息
+                    elif node_name == "generate_report":
+                        final_report = state.get("final_report")
+                        if final_report:
+                            yield 'data: ' + json.dumps({'step': 3, 'result': final_report}) + '\n\n'
+            
+            # 发送结束信号
+            app.logger.info('LangGraph分析流程完成')
+            yield 'data: [DONE]\n\n'
+        except Exception as e:
+            app.logger.error(f"LangGraph分析流程处理时出错: {e}")
+            yield 'data: ' + json.dumps({'error': f'LangGraph分析流程处理时出错：{str(e)}'}) + '\n\n'
+    
+    return Response(generate(), mimetype='text/event-stream')
+
+
+def run_chat_with_streaming(initial_state: AnalysisState):
+    """
+    使用聊天图并流式输出结果
+    对于真正流式的聊天响应，我们需要直接使用LLM的流式API
+    
+    Args:
+        initial_state (AnalysisState): 初始状态
+        
+    Returns:
+        Response: 流式响应
+    """
+    app.logger.info('开始LangGraph聊天流程（流式输出）')
+    
+    def generate():
+        try:
+            # 直接使用LLM的流式API来实现真正的流式输出
+            from llm_services.qwen_engine import chat_with_llm_stream
+            
+            user_message = initial_state["user_message"]
+            file_content = initial_state["file_content"]
+            chat_history = initial_state["chat_history"]
+            settings = initial_state["settings"]
+            output_as_table = initial_state["output_as_table"]  # 获取表格输出设置
+            
+            # 如果需要表格输出，修改用户消息以包含相关指令
+            original_user_message = user_message
+            if output_as_table:
+                table_instruction = "\n\n请在回答中尽可能使用表格来组织和呈现数据，特别是当涉及数值、比较或分类信息时。使用Markdown表格格式。"
+                user_message = original_user_message + table_instruction
+            
+            # 如果有文件内容，将其添加到用户消息中
+            if file_content:
+                user_message = f"请分析以下文件内容：\n\n{file_content}\n\n{user_message}"
+            
+            # 准备模型参数
+            model_params = {
+                'model': settings.get('modelName', 'qwen-max'),
+                'temperature': settings.get('temperature', 0.7),
+                'max_tokens': settings.get('maxTokens', 8196),
+                'top_p': settings.get('topP', 0.9),
+                'frequency_penalty': settings.get('frequencyPenalty', 0.5),
+                'api_key': settings.get('apiKey') or initial_state.get('api_key'),
+                'base_url': settings.get('baseUrl', None),
+                'history': chat_history  # 直接使用历史记录
+            }
+            
+            app.logger.info(f'开始调用LLM流式API，表格输出模式: {output_as_table}')
+            
+            # 调用模型获取流式回复
+            for chunk in chat_with_llm_stream(user_message, **model_params):
+                if chunk:
+                    yield 'data: ' + json.dumps({'reply': chunk}) + '\n\n'
+            
+            # 发送结束信号
+            app.logger.info('LangGraph聊天流程完成')
+            yield 'data: [DONE]\n\n'
+        except Exception as e:
+            app.logger.error(f"LangGraph聊天流程处理时出错: {e}")
+            yield 'data: ' + json.dumps({'error': f'LangGraph聊天流程处理时出错：{str(e)}'}) + '\n\n'
+    
+    return Response(generate(), mimetype='text/event-stream')
+
+
 def run_langgraph_step_by_step(initial_state: AnalysisState):
     """
-    使用LangGraph运行分步分析
+    使用LangGraph运行分步分析（保留向后兼容）
     
     Args:
         initial_state (AnalysisState): 初始状态
@@ -159,37 +309,27 @@ def run_langgraph_step_by_step(initial_state: AnalysisState):
     
     def generate():
         try:
-            # 逐步执行分析流程并输出中间结果
-            from langgraph_services.analysis_graph import plan_analysis_task_node, process_data_node, generate_report_node
+            # 使用分析图运行分步分析
+            final_state = analysis_graph.invoke(initial_state)
             
-            # 步骤1: 任务规划
-            app.logger.info('开始步骤1: 任务规划')
-            yield 'data: ' + json.dumps({'step': 1, 'message': '正在规划分析任务...'}) + '\n\n'
+            error = final_state.get('error')
+            if error:
+                app.logger.error(f'LangGraph处理出错: {error}')
+                yield 'data: ' + json.dumps({'error': error}) + '\n\n'
+                return
             
-            state_after_planning = plan_analysis_task_node(initial_state)
-            task_plan = state_after_planning.get("task_plan")
-            app.logger.info(f'步骤1完成: 任务规划结果 {task_plan}')
-            yield 'data: ' + json.dumps({'step': 1, 'result': task_plan.dict() if task_plan else {}}) + '\n\n'
+            # 模拟分步响应
+            task_plan = final_state.get("task_plan")
+            if task_plan:
+                yield 'data: ' + json.dumps({'step': 1, 'result': task_plan.dict() if hasattr(task_plan, 'dict') else task_plan}) + '\n\n'
             
-            # 步骤2: 数据处理
-            app.logger.info('开始步骤2: 数据处理')
-            yield 'data: ' + json.dumps({'step': 2, 'message': '正在处理数据...'}) + '\n\n'
+            computation_results = final_state.get("computation_results")
+            if computation_results:
+                yield 'data: ' + json.dumps({'step': 2, 'result': computation_results}) + '\n\n'
             
-            state_after_processing = process_data_node(state_after_planning)
-            computation_results = state_after_processing.get("computation_results")
-            app.logger.info(f'步骤2完成: 数据处理结果 {computation_results}')
-            yield 'data: ' + json.dumps({'step': 2, 'result': computation_results}) + '\n\n'
-            
-            # 步骤3: 报告生成
-            app.logger.info('开始步骤3: 报告生成')
-            yield 'data: ' + json.dumps({'step': 3, 'message': '正在生成分析报告...'}) + '\n\n'
-            
-            final_state = generate_report_node(state_after_processing)
-            report = final_state.get("final_report")
-            app.logger.info(f'步骤3完成: 报告生成结果 {report[:100] if report else "None"}...')  # 只记录前100个字符以避免日志过长
-            # 确保报告内容是有效的JSON字符串
-            safe_report = report if report and isinstance(report, str) else "未能生成分析报告"
-            yield 'data: ' + json.dumps({'step': 3, 'result': safe_report}) + '\n\n'
+            final_report = final_state.get("final_report")
+            if final_report:
+                yield 'data: ' + json.dumps({'step': 3, 'result': final_report}) + '\n\n'
             
             # 发送结束信号
             app.logger.info('LangGraph分步分析流程完成')
@@ -203,7 +343,7 @@ def run_langgraph_step_by_step(initial_state: AnalysisState):
 
 def run_langgraph_chat(initial_state: AnalysisState):
     """
-    使用LangGraph运行普通聊天
+    使用LangGraph运行普通聊天（保留向后兼容）
     
     Args:
         initial_state (AnalysisState): 初始状态
@@ -215,11 +355,22 @@ def run_langgraph_chat(initial_state: AnalysisState):
     
     def generate():
         try:
-            # 直接调用聊天节点函数，而不是通过图，以避免并发更新问题
-            from langgraph_services.analysis_graph import chat_node
+            # 创建聊天状态
+            chat_state: ChatState = {
+                "user_message": initial_state["user_message"],
+                "file_content": initial_state["file_content"],
+                "chat_history": initial_state["chat_history"],
+                "settings": initial_state["settings"],
+                "output_as_table": initial_state["output_as_table"],
+                "final_reply": None,
+                "current_step": "initial",
+                "error": None,
+                "api_key": initial_state["api_key"],
+                "processed": False
+            }
             
-            # 运行聊天节点
-            final_state = chat_node(initial_state)
+            # 运行聊天图
+            final_state = chat_graph.invoke(chat_state)
             
             error = final_state.get('error')
             if error:
@@ -227,10 +378,10 @@ def run_langgraph_chat(initial_state: AnalysisState):
                 yield 'data: ' + json.dumps({'error': error}) + '\n\n'
                 return
             
-            final_report = final_state.get('final_report')
-            if final_report:
+            final_reply = final_state.get('final_reply')
+            if final_reply:
                 # 发送完整回复
-                yield 'data: ' + json.dumps({'reply': final_report}) + '\n\n'
+                yield 'data: ' + json.dumps({'reply': final_reply}) + '\n\n'
             else:
                 yield 'data: ' + json.dumps({'error': '未能生成回复'}) + '\n\n'
             
