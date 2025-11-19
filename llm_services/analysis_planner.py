@@ -51,7 +51,11 @@ def plan_analysis_task(user_request, file_content=None, api_key=None):
         "last": "获取列中的最后一行数据，用于了解业务的最新状态",
         "missing_count": "计算列中缺失值的数量，用于评估数据完整性",
         "missing_percentage": "计算列中缺失值的百分比，用于评估数据质量",
-        "correlation": "计算数值列之间的相关性矩阵，用于识别业务指标间的关联性"
+        "correlation": "计算数值列之间的相关性矩阵，用于识别业务指标间的关联性",
+        "group_by": "按指定列分组并计算聚合统计（如sum、mean、count、max、min等），用于多维度数据透视分析",
+        "cross_tab": "创建交叉表分析两个分类变量之间的关系，用于关联性分析",
+        "pivot_table": "创建透视表，按行和列进行交叉汇总，用于多维度汇总分析",
+        "aggregate": "执行复杂的聚合操作，可对指定列应用多种统计函数"
     }
     
     # 构建操作说明字符串
@@ -85,6 +89,17 @@ def plan_analysis_task(user_request, file_content=None, api_key=None):
         {{"name": "max", "column": "销售额", "description": "找出销售额的最大值，识别最佳表现"}}
     ],
     "expected_output": "输出销售额的总和、平均值和最大值，帮助理解业务规模和最佳表现"
+}}
+
+对于多维度交叉分析（如按国家和地区、客户类型等多维度分析交易数据），请使用以下格式：
+{{
+    "task_type": "多维度交叉分析",
+    "columns": ["国家/地区", "客户类型", "交易金额"],
+    "operations": [
+        {{"name": "group_by", "column": ["国家/地区", "客户类型"], "description": "按国家/地区和客户类型分组，计算交易金额的总和、平均值等统计指标"}},
+        {{"name": "pivot_table", "column": {{"index": "国家/地区", "columns": "客户类型", "values": "交易金额", "aggfunc": "sum"}}, "description": "创建透视表展示不同国家/地区和客户类型的交易金额汇总"}}
+    ],
+    "expected_output": "输出按国家/地区和客户类型分组的交易金额汇总，帮助理解不同维度下的业务表现"
 }}
 
 请严格按照上述JSON格式输出，不要包含其他内容。
