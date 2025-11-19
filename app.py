@@ -220,7 +220,13 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
                     elif node_name == "generate_report":
                         final_report = state.get("final_report")
                         if final_report:
-                            yield 'data: ' + json.dumps({'step': 3, 'result': final_report}) + '\n\n'
+                            # 确保报告内容中的特殊字符被正确转义
+                            if isinstance(final_report, str):
+                                # 使用json.dumps处理字符串内容，确保正确转义
+                                safe_report = json.dumps(final_report, ensure_ascii=False)
+                                yield 'data: ' + json.dumps({'step': 3, 'result': json.loads(safe_report)}) + '\n\n'
+                            else:
+                                yield 'data: ' + json.dumps({'step': 3, 'result': final_report}) + '\n\n'
             
             # 发送结束信号
             app.logger.info('LangGraph分析流程完成')
@@ -295,104 +301,7 @@ def run_chat_with_streaming(initial_state: AnalysisState):
     return Response(generate(), mimetype='text/event-stream')
 
 
-def run_langgraph_step_by_step(initial_state: AnalysisState):
-    """
-    使用LangGraph运行分步分析（保留向后兼容）
-    
-    Args:
-        initial_state (AnalysisState): 初始状态
-        
-    Returns:
-        Response: 流式响应
-    """
-    app.logger.info('开始LangGraph分步分析处理')
-    
-    def generate():
-        try:
-            # 使用分析图运行分步分析
-            final_state = analysis_graph.invoke(initial_state)
-            
-            error = final_state.get('error')
-            if error:
-                app.logger.error(f'LangGraph处理出错: {error}')
-                yield 'data: ' + json.dumps({'error': error}) + '\n\n'
-                return
-            
-            # 模拟分步响应
-            task_plan = final_state.get("task_plan")
-            if task_plan:
-                yield 'data: ' + json.dumps({'step': 1, 'result': task_plan.dict() if hasattr(task_plan, 'dict') else task_plan}) + '\n\n'
-            
-            computation_results = final_state.get("computation_results")
-            if computation_results:
-                yield 'data: ' + json.dumps({'step': 2, 'result': computation_results}) + '\n\n'
-            
-            final_report = final_state.get("final_report")
-            if final_report:
-                yield 'data: ' + json.dumps({'step': 3, 'result': final_report}) + '\n\n'
-            
-            # 发送结束信号
-            app.logger.info('LangGraph分步分析流程完成')
-            yield 'data: [DONE]\n\n'
-        except Exception as e:
-            app.logger.error(f"LangGraph分步分析处理时出错: {e}")
-            yield 'data: ' + json.dumps({'error': f'LangGraph分步分析处理时出错：{str(e)}'}) + '\n\n'
-    
-    return Response(generate(), mimetype='text/event-stream')
 
-
-def run_langgraph_chat(initial_state: AnalysisState):
-    """
-    使用LangGraph运行普通聊天（保留向后兼容）
-    
-    Args:
-        initial_state (AnalysisState): 初始状态
-        
-    Returns:
-        Response: 流式响应
-    """
-    app.logger.info('开始LangGraph聊天处理')
-    
-    def generate():
-        try:
-            # 创建聊天状态
-            chat_state: ChatState = {
-                "user_message": initial_state["user_message"],
-                "file_content": initial_state["file_content"],
-                "chat_history": initial_state["chat_history"],
-                "settings": initial_state["settings"],
-                "output_as_table": initial_state["output_as_table"],
-                "final_reply": None,
-                "current_step": "initial",
-                "error": None,
-                "api_key": initial_state["api_key"],
-                "processed": False
-            }
-            
-            # 运行聊天图
-            final_state = chat_graph.invoke(chat_state)
-            
-            error = final_state.get('error')
-            if error:
-                app.logger.error(f'LangGraph处理出错: {error}')
-                yield 'data: ' + json.dumps({'error': error}) + '\n\n'
-                return
-            
-            final_reply = final_state.get('final_reply')
-            if final_reply:
-                # 发送完整回复
-                yield 'data: ' + json.dumps({'reply': final_reply}) + '\n\n'
-            else:
-                yield 'data: ' + json.dumps({'error': '未能生成回复'}) + '\n\n'
-            
-            # 发送结束信号
-            app.logger.info('LangGraph聊天流程完成')
-            yield 'data: [DONE]\n\n'
-        except Exception as e:
-            app.logger.error(f"LangGraph聊天处理时出错: {e}")
-            yield 'data: ' + json.dumps({'error': f'LangGraph聊天处理时出错：{str(e)}'}) + '\n\n'
-    
-    return Response(generate(), mimetype='text/event-stream')
 
 # 支持的文件类型
 ALLOWED_EXTENSIONS = {'txt', 'csv', 'xlsx', 'docx'}

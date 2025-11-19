@@ -514,6 +514,7 @@ async function getAIResponse(userMessage) {
         const decoder = new TextDecoder();
         let done = false;
         let aiReply = '';
+        let buffer = ''; // 添加缓冲区来处理可能被分割的数据
         
         // 添加用于分步分析的变量
         let stepResults = {};
@@ -524,8 +525,13 @@ async function getAIResponse(userMessage) {
             
             if (value) {
                 const chunk = decoder.decode(value, { stream: true });
-                // 解析SSE数据
-                const lines = chunk.split('\n');
+                // 将新块添加到缓冲区
+                buffer += chunk;
+                
+                // 按行分割并处理完整的SSE消息
+                let lines = buffer.split('\n');
+                // 保留最后一行，因为它可能不完整
+                buffer = lines.pop() || '';
                 
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
@@ -554,7 +560,13 @@ async function getAIResponse(userMessage) {
                                 continue;
                             }
                             
-                            const jsonData = JSON.parse(data);
+                            let jsonData;
+                            try {
+                                jsonData = JSON.parse(data);
+                            } catch (parseError) {
+                                console.error('JSON解析失败:', parseError, 'Raw data:', data);
+                                continue; // 跳过这个无法解析的数据块
+                            }
                             
                             if (jsonData.error) {
                                 if (outputToggle.checked && outputAiMessageElement) {
@@ -662,6 +674,157 @@ async function getAIResponse(userMessage) {
                                 } catch (innerError) {
                                     console.error('无法从错误数据中提取错误信息:', innerError);
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 处理缓冲区中可能剩余的数据
+        if (buffer.trim() !== '') {
+            // 添加缓冲区内容到行数组进行处理
+            const remainingLines = [buffer];
+            for (const line of remainingLines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    
+                    if (data === '[DONE]') {
+                        // 滚动到底部
+                        if (outputToggle.checked) {
+                            outputMessages.scrollTop = outputMessages.scrollHeight;
+                        } else {
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
+                        // 检查是否包含表格，如果是，尝试绘制图表
+                        if (outputToggle.checked && outputAiMessageElement) {
+                            checkAndRenderChart(outputAiMessageElement);
+                        } else if (aiMessageElement) {
+                            checkAndRenderChart(aiMessageElement);
+                        }
+                        return;
+                    }
+                    
+                    try {
+                        // 首先检查data是否为空或不完整
+                        if (!data || data.trim() === '') {
+                            console.warn('收到空的JSON数据，跳过处理');
+                            continue;
+                        }
+                        
+                        let jsonData;
+                        try {
+                            jsonData = JSON.parse(data);
+                        } catch (parseError) {
+                            console.error('JSON解析失败:', parseError, 'Raw data:', data);
+                            continue; // 跳过这个无法解析的数据块
+                        }
+                        
+                        if (jsonData.error) {
+                            if (outputToggle.checked && outputAiMessageElement) {
+                                if (typeof marked !== 'undefined') {
+                                    outputAiMessageElement.innerHTML = marked.parse(jsonData.error);
+                                } else {
+                                    outputAiMessageElement.textContent = jsonData.error;
+                                }
+                                outputMessages.scrollTop = outputMessages.scrollHeight;
+                            } else if (aiMessageElement) {
+                                if (typeof marked !== 'undefined') {
+                                    aiMessageElement.innerHTML = marked.parse(jsonData.error);
+                                } else {
+                                    aiMessageElement.textContent = jsonData.error;
+                                }
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                            return;
+                        }
+                        
+                        // 处理分步分析的响应
+                        if (jsonData.step !== undefined) {
+                            if (jsonData.message) {
+                                // 显示当前步骤信息
+                                console.log(`步骤 ${jsonData.step}: ${jsonData.message}`);
+                                if (outputToggle.checked && outputAiMessageElement) {
+                                    outputAiMessageElement.textContent = `步骤 ${jsonData.step}: ${jsonData.message}\n${aiReply}`;
+                                } else if (aiMessageElement) {
+                                    aiMessageElement.textContent = `步骤 ${jsonData.step}: ${jsonData.message}\n${aiReply}`;
+                                }
+                            }
+                            
+                            if (jsonData.result) {
+                                // 保存该步骤的结果
+                                stepResults[jsonData.step] = jsonData.result;
+                                
+                                // 记录步骤完成信息
+                                console.log(`步骤 ${jsonData.step} 完成`);
+                                
+                                // 如果是最后一步，将结果添加到最终回复中
+                                if (jsonData.step === 3) {
+                                    aiReply = jsonData.result;
+                                    console.log('分步分析完成，显示最终报告');
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        if (typeof marked !== 'undefined') {
+                                            outputAiMessageElement.innerHTML = marked.parse(aiReply);
+                                        } else {
+                                            outputAiMessageElement.textContent = aiReply;
+                                        }
+                                        outputMessages.scrollTop = outputMessages.scrollHeight;
+                                    } else if (aiMessageElement) {
+                                        if (typeof marked !== 'undefined') {
+                                            aiMessageElement.innerHTML = marked.parse(aiReply);
+                                        } else {
+                                            aiMessageElement.textContent = aiReply;
+                                        }
+                                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                                    }
+                                } else {
+                                    // 显示当前步骤的进度
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        outputAiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
+                                    } else if (aiMessageElement) {
+                                        aiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
+                                    }
+                                }
+                            }
+                        } 
+                        // 处理传统响应
+                        else if (jsonData.reply) {
+                            aiReply += jsonData.reply;
+                            
+                            // 根据开关状态更新相应的消息元素
+                            if (outputToggle.checked && outputAiMessageElement) {
+                                if (typeof marked !== 'undefined') {
+                                    outputAiMessageElement.innerHTML = marked.parse(aiReply);
+                                } else {
+                                    outputAiMessageElement.textContent = aiReply;
+                                }
+                                outputMessages.scrollTop = outputMessages.scrollHeight;
+                            } else if (aiMessageElement) {
+                                if (typeof marked !== 'undefined') {
+                                    aiMessageElement.innerHTML = marked.parse(aiReply);
+                                } else {
+                                    aiMessageElement.textContent = aiReply;
+                                }
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error parsing JSON:', e, 'Raw data:', data);
+                        // 尝试解析数据中的错误信息
+                        if (data && data.includes('error')) {
+                            try {
+                                // 尝试从可能的部分JSON中提取错误信息
+                                const errorMatch = data.match(/"error"[^}]*"([^"]*)"/);
+                                if (errorMatch) {
+                                    const errorMessage = errorMatch[1];
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        outputAiMessageElement.textContent = `错误: ${errorMessage}`;
+                                    } else if (aiMessageElement) {
+                                        aiMessageElement.textContent = `错误: ${errorMessage}`;
+                                    }
+                                }
+                            } catch (innerError) {
+                                console.error('无法从错误数据中提取错误信息:', innerError);
                             }
                         }
                     }
