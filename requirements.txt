@@ -4,3 +4,6 @@ pandas==2.1.4
 numpy==1.24.3
 python-docx==0.8.11
 openpyxl==3.1.2
+langgraph==0.0.60
+langchain-core==0.1.40
+pydantic==2.5.0
