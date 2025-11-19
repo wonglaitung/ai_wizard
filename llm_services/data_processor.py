@@ -1023,3 +1023,384 @@ def correlation_operation(df, columns):
     else:
         # 单列无法计算相关性
         return {"error": "相关性操作需要至少两列数据"}
+
+
+@register_operation("group_by")
+def group_by_operation(df, columns):
+    """
+    分组操作，用于按指定列进行数据透视分析
+    
+    Args:
+        df: DataFrame
+        columns: 列名或列名列表（用于分组的列）
+        
+    Returns:
+        dict: 分组后的统计结果
+    """
+    if isinstance(columns, list):
+        # 如果是列表，使用所有指定的列进行分组
+        if len(columns) == 0:
+            return {"error": "请指定至少一个用于分组的列"}
+        
+        # 确保所有分组列都存在于DataFrame中
+        existing_cols = []
+        missing_cols = []
+        for col in columns:
+            found = False
+            for df_col in df.columns:
+                if col == df_col or col in df_col or df_col in col:
+                    existing_cols.append(df_col)
+                    found = True
+                    break
+            if not found:
+                missing_cols.append(col)
+        
+        if missing_cols:
+            return {"error": f"找不到以下列: {missing_cols}"}
+        
+        try:
+            # 按指定列进行分组
+            grouped = df.groupby(existing_cols)
+            
+            # 计算各种统计量
+            result = {}
+            # 计算数值列的统计量
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            numeric_cols = [col for col in numeric_cols if col not in existing_cols]  # 排除分组列
+            
+            if len(numeric_cols) > 0:
+                # 为每个数值列计算聚合统计
+                for col in numeric_cols:
+                    col_result = {}
+                    
+                    # 总和
+                    sum_result = grouped[col].sum()
+                    if len(existing_cols) == 1:
+                        col_result[f"{col}_sum"] = sum_result.to_dict()
+                    else:
+                        # 将元组键转换为字符串
+                        sum_dict = sum_result.to_dict()
+                        col_result[f"{col}_sum"] = {str(k): v for k, v in sum_dict.items()}
+                    
+                    # 平均值
+                    mean_result = grouped[col].mean()
+                    if len(existing_cols) == 1:
+                        col_result[f"{col}_mean"] = mean_result.to_dict()
+                    else:
+                        # 将元组键转换为字符串
+                        mean_dict = mean_result.to_dict()
+                        col_result[f"{col}_mean"] = {str(k): v for k, v in mean_dict.items()}
+                    
+                    # 计数
+                    count_result = grouped[col].count()
+                    if len(existing_cols) == 1:
+                        col_result[f"{col}_count"] = count_result.to_dict()
+                    else:
+                        # 将元组键转换为字符串
+                        count_dict = count_result.to_dict()
+                        col_result[f"{col}_count"] = {str(k): v for k, v in count_dict.items()}
+                    
+                    # 最大值
+                    max_result = grouped[col].max()
+                    if len(existing_cols) == 1:
+                        col_result[f"{col}_max"] = max_result.to_dict()
+                    else:
+                        # 将元组键转换为字符串
+                        max_dict = max_result.to_dict()
+                        col_result[f"{col}_max"] = {str(k): v for k, v in max_dict.items()}
+                    
+                    # 最小值
+                    min_result = grouped[col].min()
+                    if len(existing_cols) == 1:
+                        col_result[f"{col}_min"] = min_result.to_dict()
+                    else:
+                        # 将元组键转换为字符串
+                        min_dict = min_result.to_dict()
+                        col_result[f"{col}_min"] = {str(k): v for k, v in min_dict.items()}
+                    
+                    result.update(col_result)
+            
+            # 单独计算分组计数（即每个分组中有多少行）
+            count_result = grouped.size()
+            if len(existing_cols) == 1:
+                result["group_counts"] = count_result.to_dict()
+            else:
+                # 将元组键转换为字符串
+                count_dict = count_result.to_dict()
+                result["group_counts"] = {str(k): v for k, v in count_dict.items()}
+            
+            return result
+        except Exception as e:
+            return {"error": f"分组操作失败: {str(e)}"}
+    else:
+        # 单列分组
+        # 尝试匹配列名
+        actual_column = None
+        for col in df.columns:
+            if columns == col or columns in col or col in columns:
+                actual_column = col
+                break
+        
+        if not actual_column:
+            return {"error": f"找不到列: {columns}"}
+        
+        try:
+            # 按指定列进行分组
+            grouped = df.groupby(actual_column)
+            
+            # 计算各种统计量
+            result = {}
+            # 计算数值列的统计量
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            numeric_cols = [col for col in numeric_cols if col != actual_column]  # 排除分组列
+            
+            if len(numeric_cols) > 0:
+                # 为每个数值列计算聚合统计
+                for col in numeric_cols:
+                    col_result = {}
+                    
+                    # 总和
+                    sum_result = grouped[col].sum()
+                    col_result[f"{col}_sum"] = sum_result.to_dict()
+                    
+                    # 平均值
+                    mean_result = grouped[col].mean()
+                    col_result[f"{col}_mean"] = mean_result.to_dict()
+                    
+                    # 最大值
+                    max_result = grouped[col].max()
+                    col_result[f"{col}_max"] = max_result.to_dict()
+                    
+                    # 最小值
+                    min_result = grouped[col].min()
+                    col_result[f"{col}_min"] = min_result.to_dict()
+                    
+                    result.update(col_result)
+            
+            # 分组计数
+            count_result = grouped.size().to_dict()
+            result["group_counts"] = count_result
+            
+            return result
+        except Exception as e:
+            return {"error": f"分组操作失败: {str(e)}"}
+
+
+@register_operation("cross_tab")
+def cross_tab_operation(df, columns):
+    """
+    交叉表操作，用于分析两个分类变量之间的关系
+    
+    Args:
+        df: DataFrame
+        columns: 包含两个列名的列表（用于创建交叉表）
+        
+    Returns:
+        dict: 交叉表结果
+    """
+    if isinstance(columns, list):
+        if len(columns) < 2:
+            return {"error": "交叉表操作需要至少两列数据"}
+        
+        # 确保所有列都存在于DataFrame中
+        existing_cols = []
+        missing_cols = []
+        for col in columns[:2]:  # 只取前两列
+            found = False
+            for df_col in df.columns:
+                if col == df_col or col in df_col or df_col in col:
+                    existing_cols.append(df_col)
+                    found = True
+                    break
+            if not found:
+                missing_cols.append(col)
+        
+        if missing_cols:
+            return {"error": f"找不到以下列: {missing_cols}"}
+        
+        try:
+            # 创建交叉表
+            crosstab = pd.crosstab(df[existing_cols[0]], df[existing_cols[1]], margins=True)
+            
+            # 转换为字典格式，确保所有键都是字符串
+            crosstab_dict = crosstab.to_dict()
+            # 递归地将所有非字符串键转换为字符串
+            def convert_keys_to_str(obj):
+                if isinstance(obj, dict):
+                    new_dict = {}
+                    for k, v in obj.items():
+                        new_k = str(k) if not isinstance(k, (str, int, float, bool)) else k
+                        new_dict[new_k] = convert_keys_to_str(v) if isinstance(v, (dict, list)) else v
+                    return new_dict
+                elif isinstance(obj, list):
+                    return [convert_keys_to_str(item) if isinstance(item, (dict, list)) else item for item in obj]
+                else:
+                    return obj
+            
+            result = {}
+            result["交叉表"] = convert_keys_to_str(crosstab_dict)
+            result["计数"] = convert_keys_to_str(crosstab_dict)
+            
+            # 同时计算百分比
+            crosstab_pct = pd.crosstab(df[existing_cols[0]], df[existing_cols[1]], normalize='all', margins=True) * 100
+            result["百分比"] = convert_keys_to_str(crosstab_pct.to_dict())
+            
+            return result
+        except Exception as e:
+            return {"error": f"交叉表操作失败: {str(e)}"}
+    else:
+        return {"error": "交叉表操作需要指定两列数据，请使用列表格式"}
+
+
+@register_operation("aggregate")
+def aggregate_operation(df, columns):
+    """
+    聚合操作，用于对分组数据进行多种统计计算
+    
+    Args:
+        df: DataFrame
+        columns: 包含分组列和聚合列的字典，格式为 {"group_by": ["col1", "col2"], "agg": {"col3": ["sum", "mean"], "col4": ["count", "max"]}}
+        
+    Returns:
+        dict: 聚合结果
+    """
+    if isinstance(columns, dict):
+        group_by_cols = columns.get("group_by", [])
+        agg_dict = columns.get("agg", {})
+        
+        if not group_by_cols:
+            return {"error": "请指定至少一个用于分组的列"}
+        
+        if not agg_dict:
+            return {"error": "请指定聚合操作"}
+        
+        # 确保分组列都存在于DataFrame中
+        existing_group_cols = []
+        missing_group_cols = []
+        for col in group_by_cols:
+            found = False
+            for df_col in df.columns:
+                if col == df_col or col in df_col or df_col in col:
+                    existing_group_cols.append(df_col)
+                    found = True
+                    break
+            if not found:
+                missing_group_cols.append(col)
+        
+        if missing_group_cols:
+            return {"error": f"找不到以下分组列: {missing_group_cols}"}
+        
+        # 确保聚合列都存在于DataFrame中
+        existing_agg_cols = {}
+        missing_agg_cols = []
+        for col, agg_funcs in agg_dict.items():
+            found = False
+            for df_col in df.columns:
+                if col == df_col or col in df_col or df_col in col:
+                    existing_agg_cols[df_col] = agg_funcs
+                    found = True
+                    break
+            if not found:
+                missing_agg_cols.append(col)
+        
+        if missing_agg_cols:
+            return {"error": f"找不到以下聚合列: {missing_agg_cols}"}
+        
+        try:
+            # 执行聚合操作
+            result = {}
+            grouped = df.groupby(existing_group_cols)
+            
+            # 重构聚合字典，使其符合pandas的格式
+            agg_dict_for_pandas = {}
+            for col, funcs in existing_agg_cols.items():
+                if isinstance(funcs, list):
+                    agg_dict_for_pandas[col] = funcs
+                else:
+                    agg_dict_for_pandas[col] = [funcs]
+            
+            agg_result = grouped.agg(agg_dict_for_pandas)
+            
+            # 转换为字典格式
+            if isinstance(agg_result, pd.DataFrame):
+                # 处理多级列索引
+                if isinstance(agg_result.columns, pd.MultiIndex):
+                    agg_dict_result = {}
+                    for (col, func) in agg_result.columns:
+                        key = f"{col}_{func}"
+                        # 确保所有键都转换为字符串
+                        agg_dict_result[key] = {str(k) if not isinstance(k, (str, int, float, bool)) else k: v 
+                                               for k, v in agg_result[(col, func)].to_dict().items()}
+                    result["聚合结果"] = agg_dict_result
+                else:
+                    # 确保所有键都转换为字符串
+                    result["聚合结果"] = {str(k) if not isinstance(k, (str, int, float, bool)) else k: v 
+                                        for k, v in agg_result.to_dict().items()}
+            else:
+                # 确保所有键都转换为字符串
+                result["聚合结果"] = {str(k) if not isinstance(k, (str, int, float, bool)) else k: v 
+                                    for k, v in agg_result.to_dict().items()}
+            
+            return result
+        except Exception as e:
+            return {"error": f"聚合操作失败: {str(e)}"}
+
+
+@register_operation("pivot_table")
+def pivot_table_operation(df, columns):
+    """
+    透视表操作，用于创建交叉汇总表
+    
+    Args:
+        df: DataFrame
+        columns: 包含行、列和值的字典，格式为 {"index": "行列名", "columns": "列名", "values": "值列名", "aggfunc": "聚合函数"}
+        
+    Returns:
+        dict: 透视表结果
+    """
+    if isinstance(columns, dict):
+        index_col = columns.get("index")
+        column_col = columns.get("columns")
+        value_col = columns.get("values")
+        agg_func = columns.get("aggfunc", "sum")  # 默认使用sum函数
+        
+        # 查找匹配的列名
+        actual_index_col = None
+        actual_column_col = None
+        actual_value_col = None
+        
+        for col in df.columns:
+            if index_col and (index_col == col or index_col in col or col in index_col):
+                actual_index_col = col
+            if column_col and (column_col == col or column_col in col or col in column_col):
+                actual_column_col = col
+            if value_col and (value_col == col or value_col in col or col in value_col):
+                actual_value_col = col
+        
+        if not actual_index_col:
+            return {"error": f"找不到行分组列: {index_col}"}
+        if not actual_column_col:
+            return {"error": f"找不到列分组列: {column_col}"}
+        if not actual_value_col:
+            return {"error": f"找不到值列: {value_col}"}
+        
+        try:
+            # 使用pandas创建透视表
+            pivot_result = pd.pivot_table(
+                df,
+                values=actual_value_col,
+                index=actual_index_col,
+                columns=actual_column_col,
+                aggfunc=agg_func,
+                fill_value=0  # 用0填充空值
+            )
+            
+            # 将结果转换为字典格式
+            result = {}
+            result["透视表"] = {str(k): v.to_dict() for k, v in pivot_result.items()}
+            
+            return result
+        except Exception as e:
+            return {"error": f"透视表操作失败: {str(e)}"}
+    else:
+        return {"error": "透视表操作需要指定行、列和值的字典格式"}

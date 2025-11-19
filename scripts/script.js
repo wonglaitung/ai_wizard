@@ -744,24 +744,13 @@ async function getAIResponse(userMessage) {
                             if (jsonData.message) {
                                 // 显示当前步骤信息
                                 console.log(`步骤 ${jsonData.step}: ${jsonData.message}`);
-                                if (outputToggle.checked && outputAiMessageElement) {
-                                    outputAiMessageElement.textContent = `步骤 ${jsonData.step}: ${jsonData.message}\n${aiReply}`;
-                                } else if (aiMessageElement) {
-                                    aiMessageElement.textContent = `步骤 ${jsonData.step}: ${jsonData.message}\n${aiReply}`;
-                                }
-                            }
-                            
-                            if (jsonData.result) {
-                                // 保存该步骤的结果
-                                stepResults[jsonData.step] = jsonData.result;
                                 
-                                // 记录步骤完成信息
-                                console.log(`步骤 ${jsonData.step} 完成`);
-                                
-                                // 如果是最后一步，将结果添加到最终回复中
-                                if (jsonData.step === 3) {
+                                // 检查是否是最终报告
+                                if (jsonData.result && typeof jsonData.result === 'string' && 
+                                    (jsonData.step === 3 || jsonData.step === 4 || jsonData.message.includes('最终报告'))) {
+                                    // 这是最终报告，直接显示
                                     aiReply = jsonData.result;
-                                    console.log('分步分析完成，显示最终报告');
+                                    console.log('动态规划分析完成，显示最终报告');
                                     if (outputToggle.checked && outputAiMessageElement) {
                                         if (typeof marked !== 'undefined') {
                                             outputAiMessageElement.innerHTML = marked.parse(aiReply);
@@ -778,11 +767,89 @@ async function getAIResponse(userMessage) {
                                         chatMessages.scrollTop = chatMessages.scrollHeight;
                                     }
                                 } else {
-                                    // 显示当前步骤的进度
+                                    // 显示当前步骤的进度信息
+                                    let displayMessage = `步骤 ${jsonData.step}: ${jsonData.message}`;
+                                    
                                     if (outputToggle.checked && outputAiMessageElement) {
-                                        outputAiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
+                                        outputAiMessageElement.textContent = displayMessage;
                                     } else if (aiMessageElement) {
-                                        aiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
+                                        aiMessageElement.textContent = displayMessage;
+                                    }
+                                }
+                            }
+                            
+                            if (jsonData.result) {
+                                // 保存该步骤的结果
+                                stepResults[jsonData.step] = jsonData.result;
+                                
+                                // 记录步骤完成信息
+                                console.log(`步骤 ${jsonData.step} 完成`);
+                                
+                                // 检查是否包含迭代信息
+                                if (jsonData.result.needs_replanning !== undefined) {
+                                    // 这是观察节点的输出，包含迭代决策
+                                    const qualityScore = jsonData.result.quality_score;
+                                    const feedback = jsonData.result.feedback;
+                                    const needsReplanning = jsonData.result.needs_replanning;
+                                    
+                                    let message = `分析评估完成 - 质量评分: ${qualityScore}\n反馈: ${feedback}\n`;
+                                    if (needsReplanning) {
+                                        message += '需要重新规划，正在开始新迭代...';
+                                    } else {
+                                        message += '分析完成，生成最终报告...';
+                                    }
+                                    
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        outputAiMessageElement.textContent = message;
+                                    } else if (aiMessageElement) {
+                                        aiMessageElement.textContent = message;
+                                    }
+                                } 
+                                // 检查是否是最终报告（字符串类型）
+                                else if (typeof jsonData.result === 'string') {
+                                    aiReply = jsonData.result;
+                                    console.log('动态规划分析完成，显示最终报告');
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        if (typeof marked !== 'undefined') {
+                                            outputAiMessageElement.innerHTML = marked.parse(aiReply);
+                                        } else {
+                                            outputAiMessageElement.textContent = aiReply;
+                                        }
+                                        outputMessages.scrollTop = outputMessages.scrollHeight;
+                                    } else if (aiMessageElement) {
+                                        if (typeof marked !== 'undefined') {
+                                            aiMessageElement.innerHTML = marked.parse(aiReply);
+                                        } else {
+                                            aiMessageElement.textContent = aiReply;
+                                        }
+                                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                                    }
+                                }
+                                // 如果消息包含"生成最终报告"，则直接显示最终结果
+                                else if (jsonData.message && jsonData.message.includes('生成最终报告')) {
+                                    // 在这种情况下，实际的报告内容可能稍后通过传统回复方式发送
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        outputAiMessageElement.textContent = jsonData.message;
+                                    } else if (aiMessageElement) {
+                                        aiMessageElement.textContent = jsonData.message;
+                                    }
+                                }
+                                // 检查是否是任务计划对象
+                                else if (jsonData.result.task_type || jsonData.result.columns || jsonData.result.operations) {
+                                    // 这是任务计划，显示计划信息
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        outputAiMessageElement.textContent = `已制定分析计划：${jsonData.message || '任务计划已生成'}`;
+                                    } else if (aiMessageElement) {
+                                        aiMessageElement.textContent = `已制定分析计划：${jsonData.message || '任务计划已生成'}`;
+                                    }
+                                }
+                                // 检查是否是计算结果对象
+                                else if (typeof jsonData.result === 'object' && !Array.isArray(jsonData.result)) {
+                                    // 这是计算结果，可以进一步处理
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        outputAiMessageElement.textContent = `数据处理完成：${jsonData.message || '处理结果已生成'}`;
+                                    } else if (aiMessageElement) {
+                                        aiMessageElement.textContent = `数据处理完成：${jsonData.message || '处理结果已生成'}`;
                                     }
                                 }
                             }
