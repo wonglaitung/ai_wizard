@@ -7,6 +7,10 @@
 import pandas as pd
 import numpy as np
 from io import StringIO
+import logging
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 # 操作函数注册表
 OPERATION_REGISTRY = {}
@@ -53,7 +57,7 @@ def parse_multi_sheet_data(text_data):
                         df = pd.read_csv(StringIO(df_str))
                         parsed_dataframes[current_sheet_name] = df
                     except:
-                        print(f"无法解析工作表 {current_sheet_name} 的数据")
+                        logger.error(f"无法解析工作表 {current_sheet_name} 的数据")
                         
             # 开始新工作表
             current_sheet_name = line.split('工作表: ')[1].strip()
@@ -74,7 +78,7 @@ def parse_multi_sheet_data(text_data):
                 df = pd.read_csv(StringIO(df_str))
                 parsed_dataframes[current_sheet_name] = df
             except:
-                print(f"无法解析工作表 {current_sheet_name} 的数据")
+                logger.error(f"无法解析工作表 {current_sheet_name} 的数据")
     
     return parsed_dataframes
 
@@ -239,8 +243,8 @@ def process_data(task_plan, file_content=None):
                     "results": {}
                 }
         else:
-            print("成功使用pandas讀取數據")
-            print("列名:", df.columns.tolist())
+            logger.info("成功使用pandas讀取數據")
+            logger.info("列名: %s", df.columns.tolist())
         
         # 嘗試將所有列轉換為數值類型，如果可能的話
         # 但如果是多工作表数据，跳过这个步骤，因为每个工作表会单独处理

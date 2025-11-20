@@ -1,6 +1,10 @@
 import os
 import requests
 import json
+import logging
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 # Configuration
 api_key = os.getenv('QWEN_API_KEY', '')  # 从环境变量读取API密钥
@@ -52,11 +56,11 @@ def embed_with_llm(query, base_url=None):
         
         return response.json()['data'][0]  # Return the embedding vector
     except requests.exceptions.HTTPError as http_err:
-        print(f'HTTP error during requests POST: {http_err}')
-        print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
+        logger.error(f'HTTP error during requests POST: {http_err}')
+        logger.error(f'Response content: {http_err.response.text if http_err.response else "No response"}')
         raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
-        print(f'Error during requests POST: {error}')
+        logger.error(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
 def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
@@ -139,16 +143,16 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
             'enable_thinking': enable_thinking  # 使用传入的参数
         }
         
-        # 打印用户提示词
-        print(f"[LLM CALL] Calling model: {model} with query: {query}")
+        # 记录调用信息
+        logger.info(f"[LLM CALL] Calling model: {model} with query: {query}")
         
         # 构建完整的API URL
         api_url = f"{base_url}/chat/completions"
         response = requests.post(api_url, headers=headers, json=payload, stream=True)
         response.raise_for_status()  # Raise an exception for bad status codes
         
-        # 打印用户提示词
-        print(f"[LLM CALL] Calling model: {model} with query: {query}")
+        # 记录调用信息
+        logger.info(f"[LLM CALL] Calling model: {model} with query: {query}")
         
         # 处理流式响应
         full_response = ""
@@ -169,14 +173,14 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
                         except json.JSONDecodeError:
                             # 如果不是JSON数据，跳过
                             continue
-        # 打印完整响应
-        print(f"[LLM RESPONSE] Model {model} response: {full_response[:200]}{'...' if len(full_response) > 200 else ''}")
+        # 记录响应信息
+        logger.info(f"[LLM RESPONSE] Model {model} response: {full_response[:200]}{'...' if len(full_response) > 200 else ''}")
     except requests.exceptions.HTTPError as http_err:
-        print(f'HTTP error during requests POST: {http_err}')
-        print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
+        logger.error(f'HTTP error during requests POST: {http_err}')
+        logger.error(f'Response content: {http_err.response.text if http_err.response else "No response"}')
         raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
-        print(f'Error during requests POST: {error}')
+        logger.error(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle
 
 def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
@@ -259,8 +263,8 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
             'enable_thinking': enable_thinking  # 使用传入的参数
         }
         
-        # 打印用户提示词
-        print(f"[LLM CALL] Calling model: {model} with query: {query}")
+        # 记录调用信息
+        logger.info(f"[LLM CALL] Calling model: {model} with query: {query}")
         
         # 构建完整的API URL
         api_url = f"{base_url}/chat/completions"
@@ -269,14 +273,14 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         
         result = response.json()['choices'][0]['message']['content']  # Return the response text
         
-        # 打印响应
-        print(f"[LLM RESPONSE] Model {model} response: {result[:200]}{'...' if len(result) > 200 else ''}")
+        # 记录响应信息
+        logger.info(f"[LLM RESPONSE] Model {model} response: {result[:200]}{'...' if len(result) > 200 else ''}")
         
         return result
     except requests.exceptions.HTTPError as http_err:
-        print(f'HTTP error during requests POST: {http_err}')
-        print(f'Response content: {http_err.response.text if http_err.response else "No response"}')
+        logger.error(f'HTTP error during requests POST: {http_err}')
+        logger.error(f'Response content: {http_err.response.text if http_err.response else "No response"}')
         raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
-        print(f'Error during requests POST: {error}')
+        logger.error(f'Error during requests POST: {error}')
         raise error  # Re-raise the error for the caller to handle

@@ -11,8 +11,6 @@ import logging
 from datetime import datetime
 
 
-# 配置日志
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 

@@ -4,10 +4,15 @@ import os
 import json
 import tempfile
 import logging
+import os
+
+# 从环境变量获取日志级别，默认为INFO
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+numeric_level = getattr(logging, log_level, logging.INFO)
 
 # 配置日志
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=numeric_level,
     format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s'
 )
 
