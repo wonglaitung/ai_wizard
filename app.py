@@ -385,7 +385,6 @@ def allowed_file(filename):
 
 def extract_text_from_file(filepath, filename):
     """从文件中提取文本内容"""
-    import os
     file_extension = filename.rsplit('.', 1)[1].lower()
     
     if file_extension == 'txt':
