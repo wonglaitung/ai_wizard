@@ -608,7 +608,15 @@ async function getAIResponse(userMessage) {
                                     
                                     // 如果是最后一步，将结果添加到最终回复中
                                     if (jsonData.step === 3) {
-                                        aiReply = jsonData.result;
+                                        // 确保aiReply是字符串
+                                        if (typeof jsonData.result === 'string') {
+                                            aiReply = jsonData.result;
+                                        } else if (typeof jsonData.result === 'object') {
+                                            // 如果结果是对象，将其转换为字符串
+                                            aiReply = JSON.stringify(jsonData.result, null, 2);
+                                        } else {
+                                            aiReply = String(jsonData.result);
+                                        }
                                         console.log('分步分析完成，显示最终报告');
                                         if (outputToggle.checked && outputAiMessageElement) {
                                             if (typeof marked !== 'undefined') {
@@ -746,10 +754,18 @@ async function getAIResponse(userMessage) {
                                 console.log(`步骤 ${jsonData.step}: ${jsonData.message}`);
                                 
                                 // 检查是否是最终报告
-                                if (jsonData.result && typeof jsonData.result === 'string' && 
+                                if (jsonData.result && 
                                     (jsonData.step === 3 || jsonData.step === 4 || jsonData.message.includes('最终报告'))) {
                                     // 这是最终报告，直接显示
-                                    aiReply = jsonData.result;
+                                    // 确保aiReply是字符串
+                                    if (typeof jsonData.result === 'string') {
+                                        aiReply = jsonData.result;
+                                    } else if (typeof jsonData.result === 'object') {
+                                        // 如果结果是对象，将其转换为字符串
+                                        aiReply = JSON.stringify(jsonData.result, null, 2);
+                                    } else {
+                                        aiReply = String(jsonData.result);
+                                    }
                                     console.log('动态规划分析完成，显示最终报告');
                                     if (outputToggle.checked && outputAiMessageElement) {
                                         if (typeof marked !== 'undefined') {
@@ -808,6 +824,26 @@ async function getAIResponse(userMessage) {
                                 // 检查是否是最终报告（字符串类型）
                                 else if (typeof jsonData.result === 'string') {
                                     aiReply = jsonData.result;
+                                    console.log('动态规划分析完成，显示最终报告');
+                                    if (outputToggle.checked && outputAiMessageElement) {
+                                        if (typeof marked !== 'undefined') {
+                                            outputAiMessageElement.innerHTML = marked.parse(aiReply);
+                                        } else {
+                                            outputAiMessageElement.textContent = aiReply;
+                                        }
+                                        outputMessages.scrollTop = outputMessages.scrollHeight;
+                                    } else if (aiMessageElement) {
+                                        if (typeof marked !== 'undefined') {
+                                            aiMessageElement.innerHTML = marked.parse(aiReply);
+                                        } else {
+                                            aiMessageElement.textContent = aiReply;
+                                        }
+                                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                                    }
+                                }
+                                // 如果结果是对象（如观察结果），转换为字符串后显示
+                                else if (typeof jsonData.result === 'object') {
+                                    aiReply = JSON.stringify(jsonData.result, null, 2);
                                     console.log('动态规划分析完成，显示最终报告');
                                     if (outputToggle.checked && outputAiMessageElement) {
                                         if (typeof marked !== 'undefined') {
