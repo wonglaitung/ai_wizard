@@ -607,15 +607,20 @@ async function getAIResponse(userMessage) {
                                     console.log(`步骤 ${jsonData.step} 完成`);
                                     
                                     // 如果是最后一步，将结果添加到最终回复中
-                                    if (jsonData.step === 3) {
+                                    if (jsonData.step === 3 || jsonData.step === 4 || (jsonData.message && jsonData.message.includes('最终报告'))) {
                                         // 确保aiReply是字符串
-                                        if (typeof jsonData.result === 'string') {
-                                            aiReply = jsonData.result;
-                                        } else if (typeof jsonData.result === 'object') {
-                                            // 如果结果是对象，将其转换为字符串
-                                            aiReply = JSON.stringify(jsonData.result, null, 2);
-                                        } else {
-                                            aiReply = String(jsonData.result);
+                                        if (jsonData.result) {
+                                            if (typeof jsonData.result === 'string') {
+                                                aiReply = jsonData.result;
+                                            } else if (typeof jsonData.result === 'object') {
+                                                // 如果结果是对象，将其转换为字符串
+                                                aiReply = JSON.stringify(jsonData.result, null, 2);
+                                            } else {
+                                                aiReply = String(jsonData.result);
+                                            }
+                                        } else if (jsonData.message) {
+                                            // 如果没有结果但有消息，显示消息
+                                            aiReply = jsonData.message;
                                         }
                                         console.log('分步分析完成，显示最终报告');
                                         if (outputToggle.checked && outputAiMessageElement) {
