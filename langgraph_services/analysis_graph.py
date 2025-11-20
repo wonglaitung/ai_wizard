@@ -9,7 +9,7 @@ import pandas as pd
 import json
 import logging
 from datetime import datetime
-from langchain_core.runnables import ConfigurableFieldSpec
+
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -537,11 +537,7 @@ def create_analysis_graph():
     return create_dynamic_analysis_graph()
 
 
-def create_analysis_graph():
-    """
-    创建分析流程图（保持向后兼容）
-    """
-    return create_dynamic_analysis_graph()  # 现在返回动态图作为默认
+
 
 
 def chat_node(state: ChatState) -> ChatState:
@@ -713,24 +709,7 @@ def create_conditional_graph():
     return route_and_execute
 
 
-def create_simple_analysis_graph():
-    """
-    创建简化的分析流程图（仅分步分析）
-    """
-    workflow = StateGraph(AnalysisState)
-    
-    # 添加节点
-    workflow.add_node("plan_analysis", plan_analysis_task_node)
-    workflow.add_node("process_data", process_data_node)
-    workflow.add_node("generate_report", generate_report_node)
-    
-    # 定义边
-    workflow.add_edge(START, "plan_analysis")
-    workflow.add_edge("plan_analysis", "process_data")
-    workflow.add_edge("process_data", "generate_report")
-    workflow.add_edge("generate_report", END)
-    
-    return workflow.compile()
+
 
 
 def run_full_analysis(initial_state: AnalysisState):
