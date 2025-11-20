@@ -1136,3 +1136,27 @@ input:checked + .slider:before {
         transform: rotate(360deg);
     }
 }
+
+/* 进度条样式 */
+.progress-container {
+    width: 100%;
+    margin: 10px 0;
+    background-color: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 20px;
+    display: none;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background-color: #4CAF50;
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
