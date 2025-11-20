@@ -1382,31 +1382,61 @@ def pivot_table_operation(df, columns):
         # 查找匹配的列名
         actual_index_col = None
         actual_column_col = None
-        actual_value_col = None
+        actual_value_cols = []  # 支持多列
         
         for col in df.columns:
             if index_col and (index_col == col or index_col in col or col in index_col):
                 actual_index_col = col
             if column_col and (column_col == col or column_col in col or col in column_col):
                 actual_column_col = col
-            if value_col and (value_col == col or value_col in col or col in value_col):
-                actual_value_col = col
+        
+        # 处理值列 - 支持单个值或列表
+        if isinstance(value_col, list):
+            for v_col in value_col:
+                for df_col in df.columns:
+                    if v_col == df_col or v_col in df_col or df_col in v_col:
+                        actual_value_cols.append(df_col)
+                        break
+        else:
+            for col in df.columns:
+                if value_col and (value_col == col or value_col in col or col in value_col):
+                    actual_value_cols.append(col)
+                    break
         
         if not actual_index_col:
             return {"error": f"找不到行分组列: {index_col}"}
         if not actual_column_col:
             return {"error": f"找不到列分组列: {column_col}"}
-        if not actual_value_col:
+        if not actual_value_cols:
             return {"error": f"找不到值列: {value_col}"}
         
         try:
+            # 处理聚合函数 - 如果是字典则使用字典，否则使用单个函数
+            if isinstance(agg_func, dict):
+                # 如果agg_func是字典，确保它与实际的值列对应
+                actual_agg_func = {}
+                for v_col in actual_value_cols:
+                    # 查找agg_func中最匹配的列名
+                    matched_key = None
+                    for key in agg_func.keys():
+                        if key == v_col or key in v_col or v_col in key:
+                            matched_key = key
+                            break
+                    if matched_key:
+                        actual_agg_func[v_col] = agg_func[matched_key]
+                    else:
+                        actual_agg_func[v_col] = 'sum'  # 默认使用sum
+            else:
+                # 如果agg_func是单个函数，应用到所有值列
+                actual_agg_func = agg_func
+        
             # 使用pandas创建透视表
             pivot_result = pd.pivot_table(
                 df,
-                values=actual_value_col,
+                values=actual_value_cols if len(actual_value_cols) > 1 else actual_value_cols[0],
                 index=actual_index_col,
                 columns=actual_column_col,
-                aggfunc=agg_func,
+                aggfunc=actual_agg_func,
                 fill_value=0  # 用0填充空值
             )
             
@@ -1416,6 +1446,7 @@ def pivot_table_operation(df, columns):
             
             return result
         except Exception as e:
+            logger.error(f"透视表操作失败: {str(e)}")
             return {"error": f"透视表操作失败: {str(e)}"}
     else:
         return {"error": "透视表操作需要指定行、列和值的字典格式"}
