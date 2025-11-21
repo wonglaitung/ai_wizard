@@ -19,9 +19,7 @@ const fileUploadInput = document.getElementById('file-upload');
 const fileNameSpan = document.getElementById('file-name');
 const clearFileBtn = document.getElementById('clear-file');
 
-// 进度条元素
-let progressBar = null;
-let progressContainer = null;
+
 
 // 配置页面相关元素
 const apiKeyInput = document.getElementById('api-key');
@@ -415,9 +413,6 @@ function displayMessage(message, sender) {
 // 获取AI回复
 async function getAIResponse(userMessage) {
     try {
-        // 重置进度条
-        resetProgress();
-        
         // 显示"正在输入"提示
         let typingIndicator = displayTypingIndicator();
         
@@ -557,8 +552,6 @@ async function getAIResponse(userMessage) {
                             } else if (aiMessageElement) {
                                 checkAndRenderChart(aiMessageElement);
                             }
-                            // 重置进度条
-                            resetProgress();
                             return;
                         }
                         
@@ -597,7 +590,13 @@ async function getAIResponse(userMessage) {
                             }
                             
                             // 使用统一的处理函数处理分步分析响应和传统响应
-                            handleResponseData(jsonData);
+                            const result = handleResponseData(jsonData, outputAiMessageElement, aiMessageElement, aiReply, stepResults);
+                            if (result.aiReplyUpdated) {
+                                aiReply = result.aiReply;
+                            }
+                            if (result.stepResultsUpdated) {
+                                stepResults = result.stepResults;
+                            }
                         } catch (e) {
                             console.error('Error parsing JSON:', e, 'Raw data:', data);
                             // 尝试解析数据中的错误信息
@@ -644,8 +643,6 @@ async function getAIResponse(userMessage) {
                         } else if (aiMessageElement) {
                             checkAndRenderChart(aiMessageElement);
                         }
-                        // 重置进度条
-                        resetProgress();
                         return;
                     }
                     
@@ -684,7 +681,13 @@ async function getAIResponse(userMessage) {
                         }
                         
                         // 使用统一的处理函数处理分步分析响应和传统响应
-                        handleResponseData(jsonData);
+                        const result = handleResponseData(jsonData, outputAiMessageElement, aiMessageElement, aiReply, stepResults);
+                        if (result.aiReplyUpdated) {
+                            aiReply = result.aiReply;
+                        }
+                        if (result.stepResultsUpdated) {
+                            stepResults = result.stepResults;
+                        }
                     } catch (e) {
                         console.error('Error parsing JSON:', e, 'Raw data:', data);
                         // 尝试解析数据中的错误信息
@@ -721,9 +724,6 @@ async function getAIResponse(userMessage) {
                 chatMessages.removeChild(chatTypingIndicator);
             }
         }
-        
-        // 重置进度条
-        resetProgress();
         
         console.error('Error:', error);
         // 显示详细的错误信息
@@ -1021,77 +1021,7 @@ function renderChart(canvas, tableData, chartType = 'bar') {
     canvas.chartInstance = new Chart(canvas, config);
 }
 
-// 创建进度条元素
-function createProgressBar() {
-    if (progressContainer) {
-        // 如果进度条容器已存在，直接返回
-        return progressContainer;
-    }
-    
-    progressContainer = document.createElement('div');
-    progressContainer.className = 'progress-container';
-    progressContainer.style.cssText = `
-        width: 100%;
-        margin: 10px 0;
-        background-color: #f0f0f0;
-        border-radius: 10px;
-        overflow: hidden;
-        height: 20px;
-        display: none;
-    `;
-    
-    progressBar = document.createElement('div');
-    progressBar.className = 'progress-bar';
-    progressBar.style.cssText = `
-        height: 100%;
-        width: 0%;
-        background-color: #4CAF50;
-        transition: width 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 12px;
-        font-weight: bold;
-    `;
-    
-    progressContainer.appendChild(progressBar);
-    
-    return progressContainer;
-}
 
-// 更新进度条
-function updateProgress(step, totalSteps = 4, message = '') {
-    if (!progressBar) {
-        createProgressBar();
-    }
-    
-    // 计算进度百分比
-    const progressPercent = Math.min(100, Math.round((step / totalSteps) * 100));
-    progressBar.style.width = `${progressPercent}%`;
-    progressBar.textContent = `${progressPercent}% ${message}`;
-    progressContainer.style.display = 'block';
-    
-    // 确保进度条被添加到正确的位置
-    const targetElement = outputToggle.checked ? outputMessages : chatMessages;
-    
-    // 检查是否已经有进度条，如果没有则添加
-    if (!targetElement.contains(progressContainer)) {
-        targetElement.appendChild(progressContainer);
-    }
-    
-    // 滚动到最新内容
-    targetElement.scrollTop = targetElement.scrollHeight;
-}
-
-// 重置进度条
-function resetProgress() {
-    if (progressBar) {
-        progressBar.style.width = '0%';
-        progressBar.textContent = '';
-        progressContainer.style.display = 'none';
-    }
-}
 
 // 显示"正在输入"提示
 function displayTypingIndicator() {
@@ -1113,11 +1043,6 @@ function displayTypingIndicator() {
         
         chatMessages.appendChild(chatIndicator);
         chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-    
-    // 初始化进度条，但不立即显示
-    if (!progressBar) {
-        createProgressBar();
     }
     
     return { chatIndicator: chatIndicator, outputIndicator: outputIndicator };
@@ -1213,252 +1138,132 @@ function saveConfig() {
     localStorage.setItem('aiSettings', JSON.stringify(config));
 }
 
-// 统一处理响应数据的函数
-function handleResponseData(jsonData) {
+// 统一处理响应数据的函数，接收需要的元素作为参数
+function handleResponseData(jsonData, outputAiMessageElement, aiMessageElement, currentAiReply, currentStepResults) {
+    // 内部辅助函数：更新消息显示
+    function updateMessageDisplay(content, isHtml = true) {
+        if (outputToggle.checked && outputAiMessageElement) {
+            if (isHtml && typeof marked !== 'undefined') {
+                outputAiMessageElement.innerHTML = marked.parse(content);
+            } else {
+                outputAiMessageElement.textContent = content;
+            }
+            outputMessages.scrollTop = outputMessages.scrollHeight;
+        } else if (aiMessageElement) {
+            if (isHtml && typeof marked !== 'undefined') {
+                aiMessageElement.innerHTML = marked.parse(content);
+            } else {
+                aiMessageElement.textContent = content;
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    }
+    
+    // 内部辅助函数：判断是否为计算结果对象
+    function isComputationResult(obj) {
+        return obj && 
+               typeof obj === 'object' && 
+               !Array.isArray(obj) && 
+               obj.hasOwnProperty('results') && 
+               obj.hasOwnProperty('task_type');
+    }
+    
+    // 内部辅助函数：判断是否为最终报告对象
+    function isFinalReport(obj) {
+        return obj && 
+               typeof obj === 'object' && 
+               obj.hasOwnProperty('final_report') && 
+               typeof obj.final_report === 'string';
+    }
+    
+    let aiReply = currentAiReply; // 使用传入的值作为初始值
+    let stepResults = { ...currentStepResults }; // 使用传入的 stepResults 副本
+    let aiReplyUpdated = false; // 标记 aiReply 是否被更新
+    let stepResultsUpdated = false; // 标记 stepResults 是否被更新
+    
     // 处理分步分析的响应
     if (jsonData.step !== undefined) {
+        // 如果有消息，先显示
         if (jsonData.message) {
-            // 显示当前步骤信息
             console.log(`步骤 ${jsonData.step}: ${jsonData.message}`);
-            
-            // 更新进度条
-            updateProgress(jsonData.step, 4, `步骤${jsonData.step} - ${jsonData.message.split('\n')[0]}`);
-            
-            // 根据步骤类型显示不同的进度信息
             let displayMessage = `🔄 **步骤 ${jsonData.step}** - ${jsonData.message}`;
-            
-            if (outputToggle.checked && outputAiMessageElement) {
-                if (typeof marked !== 'undefined') {
-                    outputAiMessageElement.innerHTML = marked.parse(displayMessage);
-                } else {
-                    outputAiMessageElement.textContent = displayMessage;
-                }
-                outputMessages.scrollTop = outputMessages.scrollHeight;
-            } else if (aiMessageElement) {
-                if (typeof marked !== 'undefined') {
-                    aiMessageElement.innerHTML = marked.parse(displayMessage);
-                } else {
-                    aiMessageElement.textContent = displayMessage;
-                }
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
+            updateMessageDisplay(displayMessage, true);
         }
-        
-        if (jsonData.result) {
+
+        if (jsonData.result !== undefined) {
             // 保存该步骤的结果
             stepResults[jsonData.step] = jsonData.result;
-            
-            // 记录步骤完成信息
+            stepResultsUpdated = true;
             console.log(`步骤 ${jsonData.step} 完成`);
-            
-            // 检查是否包含迭代信息
-            if (jsonData.result.needs_replanning !== undefined) {
-                // 这是观察节点的输出，包含迭代决策
+
+            // 根据结果类型进行处理
+            if (isComputationResult(jsonData.result)) {
+                // 计算结果对象：仅显示简短消息，不显示详细数据
+                console.log('收到计算结果对象，等待最终报告...');
+                if (jsonData.message) {
+                    const progressMessage = `📈 **数据处理完成**：${jsonData.message}`;
+                    updateMessageDisplay(progressMessage, true);
+                }
+            } else if (isFinalReport(jsonData.result)) {
+                // 最终报告对象：提取并显示报告内容
+                aiReply = jsonData.result.final_report;
+                aiReplyUpdated = true;
+                console.log('分步分析完成，显示最终报告');
+                updateMessageDisplay(aiReply, true);
+            } else if (typeof jsonData.result === 'string') {
+                // 纯字符串结果：直接使用作为报告内容
+                aiReply = jsonData.result;
+                aiReplyUpdated = true;
+                console.log('动态规划分析完成，显示最终报告');
+                updateMessageDisplay(aiReply, true);
+            } else if (typeof jsonData.result === 'object' && jsonData.result.needs_replanning !== undefined) {
+                // 观察评估结果：显示评估信息
                 const qualityScore = jsonData.result.quality_score;
                 const feedback = jsonData.result.feedback;
                 const needsReplanning = jsonData.result.needs_replanning;
                 
-                let message = `📊 **分析评估完成** - 质量评分: ${qualityScore}\n📝 **反馈**: ${feedback}\n`;
+                let message = `📊 **分析评估完成** - 质量评分: ${qualityScore}
+📝 **反馈**: ${feedback}
+`;
                 if (needsReplanning) {
                     message += '🔄 **需要重新规划**，正在开始新迭代...';
-                    // 如果需要重新规划，更新进度
-                    updateProgress(1, 4, '重新规划中...');
                 } else {
                     message += '✅ **分析完成**，生成最终报告...';
-                    // 接近完成，更新进度
-                    updateProgress(3, 4, '生成最终报告...');
                 }
                 
-                if (outputToggle.checked && outputAiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        outputAiMessageElement.innerHTML = marked.parse(message);
-                    } else {
-                        outputAiMessageElement.textContent = message;
-                    }
-                    outputMessages.scrollTop = outputMessages.scrollHeight;
-                } else if (aiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        aiMessageElement.innerHTML = marked.parse(message);
-                    } else {
-                        aiMessageElement.textContent = message;
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            } 
-            // 检查是否是最终报告（字符串类型）
-            else if (typeof jsonData.result === 'string') {
-                aiReply = jsonData.result;
-                console.log('动态规划分析完成，显示最终报告');
-                // 设置进度到100%
-                updateProgress(4, 4, '分析完成');
-                if (outputToggle.checked && outputAiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        outputAiMessageElement.innerHTML = marked.parse(aiReply);
-                    } else {
-                        outputAiMessageElement.textContent = aiReply;
-                    }
-                    outputMessages.scrollTop = outputMessages.scrollHeight;
-                } else if (aiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        aiMessageElement.innerHTML = marked.parse(aiReply);
-                    } else {
-                        aiMessageElement.textContent = aiReply;
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }
-            // 如果结果是对象（如观察结果），转换为字符串后显示
-            else if (typeof jsonData.result === 'object') {
-                aiReply = JSON.stringify(jsonData.result, null, 2);
-                console.log('动态规划分析完成，显示最终报告');
-                // 设置进度到100%
-                updateProgress(4, 4, '分析完成');
-                if (outputToggle.checked && outputAiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        outputAiMessageElement.innerHTML = marked.parse(aiReply);
-                    } else {
-                        outputAiMessageElement.textContent = aiReply;
-                    }
-                    outputMessages.scrollTop = outputMessages.scrollHeight;
-                } else if (aiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        aiMessageElement.innerHTML = marked.parse(aiReply);
-                    } else {
-                        aiMessageElement.textContent = aiReply;
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }
-            // 如果消息包含"生成最终报告"，则直接显示最终结果
-            else if (jsonData.message && jsonData.message.includes('生成最终报告')) {
-                // 在这种情况下，实际的报告内容可能稍后通过传统回复方式发送
-                // 更新进度到100%
-                updateProgress(4, 4, '生成最终报告...');
-                if (outputToggle.checked && outputAiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        outputAiMessageElement.innerHTML = marked.parse(jsonData.message);
-                    } else {
-                        outputAiMessageElement.textContent = jsonData.message;
-                    }
-                    outputMessages.scrollTop = outputMessages.scrollHeight;
-                } else if (aiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        aiMessageElement.innerHTML = marked.parse(jsonData.message);
-                    } else {
-                        aiMessageElement.textContent = jsonData.message;
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }
-            // 检查是否是任务计划对象
-            else if (jsonData.result.task_type || jsonData.result.columns || jsonData.result.operations) {
-                // 这是任务计划，显示计划信息
+                updateMessageDisplay(message, true);
+            } else if (jsonData.result.task_type || jsonData.result.columns || jsonData.result.operations) {
+                // 任务计划对象：显示计划信息
                 const planMessage = `📋 **已制定分析计划**：${jsonData.message || '任务计划已生成'}`;
-                // 更新进度到第1步
-                updateProgress(1, 4, '分析计划已生成');
-                if (outputToggle.checked && outputAiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        outputAiMessageElement.innerHTML = marked.parse(planMessage);
-                    } else {
-                        outputAiMessageElement.textContent = planMessage;
-                    }
-                    outputMessages.scrollTop = outputMessages.scrollHeight;
-                } else if (aiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        aiMessageElement.innerHTML = marked.parse(planMessage);
-                    } else {
-                        aiMessageElement.textContent = planMessage;
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }
-            // 检查是否是计算结果对象
-            else if (typeof jsonData.result === 'object' && !Array.isArray(jsonData.result)) {
-                // 这是计算结果，可以进一步处理
-                const resultMessage = `📈 **数据处理完成**：${jsonData.message || '处理结果已生成'}`;
-                // 更新进度到第2步
-                updateProgress(2, 4, '数据处理完成');
-                if (outputToggle.checked && outputAiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        outputAiMessageElement.innerHTML = marked.parse(resultMessage);
-                    } else {
-                        outputAiMessageElement.textContent = resultMessage;
-                    }
-                    outputMessages.scrollTop = outputMessages.scrollHeight;
-                } else if (aiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        aiMessageElement.innerHTML = marked.parse(resultMessage);
-                    } else {
-                        aiMessageElement.textContent = resultMessage;
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            }
-            // 如果是最后一步，将结果添加到最终回复中 (保持原来的兼容性)
-            else if (jsonData.step === 3 || jsonData.step === 4 || (jsonData.message && jsonData.message.includes('最终报告'))) {
-                // 确保aiReply是字符串
-                if (jsonData.result) {
-                    if (typeof jsonData.result === 'string') {
-                        aiReply = jsonData.result;
-                    } else if (typeof jsonData.result === 'object') {
-                        // 如果结果是对象，将其转换为字符串
-                        aiReply = JSON.stringify(jsonData.result, null, 2);
-                    } else {
-                        aiReply = String(jsonData.result);
-                    }
-                } else if (jsonData.message) {
-                    // 如果没有结果但有消息，显示消息
-                    aiReply = jsonData.message;
-                }
-                console.log('分步分析完成，显示最终报告');
-                // 设置进度到100%
-                updateProgress(4, 4, '分析完成');
-                if (outputToggle.checked && outputAiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        outputAiMessageElement.innerHTML = marked.parse(aiReply);
-                    } else {
-                        outputAiMessageElement.textContent = aiReply;
-                    }
-                    outputMessages.scrollTop = outputMessages.scrollHeight;
-                } else if (aiMessageElement) {
-                    if (typeof marked !== 'undefined') {
-                        aiMessageElement.innerHTML = marked.parse(aiReply);
-                    } else {
-                        aiMessageElement.textContent = aiReply;
-                    }
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
+                updateMessageDisplay(planMessage, true);
             } else {
-                // 显示当前步骤的进度
-                if (outputToggle.checked && outputAiMessageElement) {
-                    outputAiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
-                } else if (aiMessageElement) {
-                    aiMessageElement.textContent = `已完成步骤 ${jsonData.step}，正在处理下一步...`;
-                }
+                // 其他类型的对象结果：转换为字符串显示
+                aiReply = JSON.stringify(jsonData.result, null, 2);
+                aiReplyUpdated = true;
+                console.log('动态规划分析完成，显示最终报告');
+                updateMessageDisplay(aiReply, true);
             }
+        } else if (jsonData.message && jsonData.message.includes('最终报告')) {
+            updateMessageDisplay(jsonData.message, true);
+        } else if (!jsonData.result) {
+            // 显示当前步骤的进度
+            updateMessageDisplay(`已完成步骤 ${jsonData.step}，正在处理下一步...`, false);
         }
     } 
     // 处理传统响应
     else if (jsonData.reply) {
         aiReply += jsonData.reply;
-        
-        // 根据开关状态更新相应的消息元素
-        if (outputToggle.checked && outputAiMessageElement) {
-            if (typeof marked !== 'undefined') {
-                outputAiMessageElement.innerHTML = marked.parse(aiReply);
-            } else {
-                outputAiMessageElement.textContent = aiReply;
-            }
-            outputMessages.scrollTop = outputMessages.scrollHeight;
-        } else if (aiMessageElement) {
-            if (typeof marked !== 'undefined') {
-                aiMessageElement.innerHTML = marked.parse(aiReply);
-            } else {
-                aiMessageElement.textContent = aiReply;
-            }
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
+        aiReplyUpdated = true;
+        updateMessageDisplay(aiReply, true);
     }
+    
+    // 返回可能更新的值
+    return { 
+        aiReply: aiReply, 
+        aiReplyUpdated: aiReplyUpdated,
+        stepResults: stepResults,
+        stepResultsUpdated: stepResultsUpdated
+    };
 }
 
 // 重置配置
