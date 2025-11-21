@@ -128,8 +128,8 @@ def process_data(task_plan, file_content=None):
         df = pd.DataFrame(data)
         multi_sheet_data = None
     else:
-        # 檢查是否是多工作表數據（包含"工作表: "標記）
-        if "工作表: " in file_content:
+        # 檢查是否是多工作表數據（包含"工作表: "或"Sheet: "標記）
+        if "工作表: " in file_content or "Sheet: " in file_content:
             # 解析多工作表數據
             multi_sheet_data = parse_multi_sheet_data(file_content)
             # 使用第一個工作表作為默認數據框
