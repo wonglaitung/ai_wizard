@@ -78,7 +78,7 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
     任务规划节点
     将用户的数据分析请求转换为具体的计算任务
     """
-    from llm_services.analysis_planner import plan_analysis_task
+    from llm_services.enhanced_analysis_planner import plan_analysis_task
     
     start_time = datetime.now()
     logger.info(f"[{start_time}] 开始任务规划节点处理")
@@ -88,11 +88,27 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         file_content = state["file_content"]
         api_key = state["api_key"]
         
+        # 获取历史规划记录（转换为字典格式供增强规划器使用）
+        plan_history = state.get("plan_history", [])
+        plan_history_dicts = []
+        for plan in plan_history:
+            if hasattr(plan, 'dict'):
+                plan_history_dicts.append(plan.dict())
+            elif isinstance(plan, dict):
+                plan_history_dicts.append(plan)
+            else:
+                # 如果是其他格式，尝试转换
+                plan_dict = {}
+                if hasattr(plan, '__dict__'):
+                    plan_dict = plan.__dict__.copy()
+                plan_history_dicts.append(plan_dict)
+        
         logger.info(f"任务规划 - 用户请求: {user_request[:50]}..." if len(user_request) > 50 else f"任务规划 - 用户请求: {user_request}")
         logger.info(f"任务规划 - 文件内容长度: {len(file_content) if file_content else 0}")
+        logger.info(f"任务规划 - 历史规划数量: {len(plan_history_dicts)}")
         
-        # 调用原有的任务规划函数
-        task_plan_dict = plan_analysis_task(user_request, file_content, api_key)
+        # 调用增强的任务规划函数，传入历史规划记录
+        task_plan_dict = plan_analysis_task(user_request, file_content, api_key, plan_history_dicts)
         
         # 将字典转换为TaskPlan对象
         task_plan = TaskPlan(
@@ -352,15 +368,18 @@ def create_conditional_graph():
     创建条件路由图（使用外部路由逻辑）
     """
     from langgraph.graph import END
-    from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node, chat_node
-    
-    analysis_graph_instance = create_analysis_graph()
-    chat_graph_instance = create_chat_graph()
     
     def route_and_execute(state: AnalysisState):
         """
         根据条件路由到不同的图
         """
+        # 延迟导入以避免循环导入
+        from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node, chat_node
+        
+        # 动态获取图实例以避免循环导入
+        analysis_graph_instance = get_analysis_graph()
+        chat_graph_instance = get_chat_graph()
+        
         needs_step_by_step = (
             state.get("file_content") and state["file_content"] != '' or
             any(keyword in state["user_message"].lower() for keyword in 
@@ -423,10 +442,19 @@ def run_full_analysis(initial_state: AnalysisState):
     yield (3, "reporting", final_state)
 
 
-# 创建全局图实例
-analysis_graph = create_analysis_graph()  # 现在使用动态规划图
-chat_graph = create_chat_graph()
-conditional_graph_executor = create_conditional_graph()
+
+# 延迟初始化图实例以避免循环导入
+def get_analysis_graph():
+    from .node_handlers import plan_analysis_task_node, process_data_node, observe_and_evaluate_node, replan_analysis_task_node, generate_report_node
+    return create_analysis_graph()
+
+def get_chat_graph():
+    from .node_handlers import chat_node
+    return create_chat_graph()
+
+def get_conditional_graph():
+    from .node_handlers import plan_analysis_task_node, process_data_node, observe_and_evaluate_node, replan_analysis_task_node, generate_report_node, chat_node
+    return create_conditional_graph()
 
 
 def process_data_node(state: AnalysisState) -> AnalysisState:
@@ -837,13 +865,17 @@ def create_conditional_graph():
     """
     from langgraph.graph import END
     
-    analysis_graph_instance = create_analysis_graph()
-    chat_graph_instance = create_chat_graph()
-    
     def route_and_execute(state: AnalysisState):
         """
         根据条件路由到不同的图
         """
+        # 延迟导入以避免循环导入
+        from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node, chat_node
+        
+        # 动态获取图实例以避免循环导入
+        analysis_graph_instance = get_analysis_graph()
+        chat_graph_instance = get_chat_graph()
+        
         needs_step_by_step = (
             state.get("file_content") and state["file_content"] != '' or
             any(keyword in state["user_message"].lower() for keyword in 
@@ -909,7 +941,16 @@ def run_full_analysis(initial_state: AnalysisState):
     yield (3, "reporting", final_state)
 
 
-# 创建全局图实例
-analysis_graph = create_analysis_graph()  # 现在使用动态规划图
-chat_graph = create_chat_graph()
-conditional_graph_executor = create_conditional_graph()
+
+# 延迟初始化图实例以避免循环导入
+def get_analysis_graph():
+    from .node_handlers import plan_analysis_task_node, process_data_node, observe_and_evaluate_node, replan_analysis_task_node, generate_report_node
+    return create_analysis_graph()
+
+def get_chat_graph():
+    from .node_handlers import chat_node
+    return create_chat_graph()
+
+def get_conditional_graph():
+    from .node_handlers import plan_analysis_task_node, process_data_node, observe_and_evaluate_node, replan_analysis_task_node, generate_report_node, chat_node
+    return create_conditional_graph()
