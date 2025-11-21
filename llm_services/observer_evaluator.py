@@ -138,12 +138,18 @@ def should_replan_analysis(observation: Observation, quality_threshold: float = 
     Returns:
         bool: 是否需要重新规划
     """
-    # 如果质量评分低于阈值，或者未满足需求，或者反馈表明需要改进，则需要重新规划
-    needs_replanning = (
-        observation.quality_score < quality_threshold or 
-        not observation.success or
-        len(observation.next_actions) > 0 or
-        "需要重新规划" in observation.feedback
-    )
+    # 如果质量评分高于或等于阈值，则认为结果已经足够好，不需要重新规划
+    # 但如果存在明确的改进建议，则仍可能需要重新规划
+    if observation.quality_score >= quality_threshold and not observation.next_actions and "需要重新规划" not in observation.feedback:
+        # 质量已满足要求且无进一步改进需求，不需要重新规划
+        needs_replanning = False
+    else:
+        # 如果质量评分低于阈值，或者未满足需求，或者反馈表明需要改进，则需要重新规划
+        needs_replanning = (
+            observation.quality_score < quality_threshold or 
+            not observation.success or
+            len(observation.next_actions) > 0 or
+            "需要重新规划" in observation.feedback
+        )
     
     return needs_replanning
