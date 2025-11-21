@@ -8,10 +8,49 @@ import pandas as pd
 import json
 import logging
 from datetime import datetime
-from .analysis_graph import AnalysisState, TaskPlan, Observation
 
 
 logger = logging.getLogger(__name__)
+
+
+# 重新定义这些类型以避免循环导入
+class TaskPlan(BaseModel):
+    """任务计划定义"""
+    task_type: str = Field(description="任务类型")
+    columns: List[str] = Field(description="需要分析的列名列表")
+    operations: List[Dict[str, Any]] = Field(description="需要执行的操作列表")
+    expected_output: str = Field(description="预期的输出结果描述")
+
+
+class Observation(BaseModel):
+    """观察结果定义"""
+    results: Dict[str, Any] = Field(description="执行结果")
+    quality_score: float = Field(description="结果质量评分(0-1)")
+    feedback: str = Field(description="结果反馈")
+    success: bool = Field(description="执行是否成功")
+    next_actions: List[str] = Field(description="建议的下一步操作")
+
+
+# AnalysisState 类型定义（TypedDict）
+AnalysisState = TypedDict('AnalysisState', {
+    "user_message": str,
+    "file_content": str,
+    "chat_history": List[Dict[str, str]],
+    "settings": Dict[str, Any],
+    "output_as_table": bool,
+    "task_plan": Optional[TaskPlan],
+    "computation_results": Optional[Dict[str, Any]],
+    "final_report": Optional[str],
+    "current_step": str,
+    "error": Optional[str],
+    "api_key": Optional[str],
+    "processed": bool,  # 标记是否已处理
+    "iteration_count": int,  # 迭代次数
+    "max_iterations": int,  # 最大迭代次数
+    "observation": Optional[Observation],  # 当前观察结果
+    "needs_replanning": bool,  # 是否需要重新规划
+    "plan_history": List[TaskPlan]  # 历史计划
+})
 
 
 def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:

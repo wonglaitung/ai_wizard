@@ -206,6 +206,20 @@ class ChatState(TypedDict):
     processed: bool  # 标记是否已处理
 
 
+class ChatState(TypedDict):
+    """聊天流程状态定义"""
+    user_message: str
+    file_content: str
+    chat_history: List[Dict[str, str]]
+    settings: Dict[str, Any]
+    output_as_table: bool
+    final_reply: Optional[str]
+    current_step: str
+    error: Optional[str]
+    api_key: Optional[str]
+    processed: bool  # 标记是否已处理
+
+
 def should_continue_iteration(state: AnalysisState) -> str:
     """
     决定是否继续迭代的条件函数
@@ -627,6 +641,8 @@ def create_dynamic_analysis_graph():
     创建动态规划分析流程图
     实现规划 → 执行 → 观察 → 重新规划的循环
     """
+    from .node_handlers import plan_analysis_task_node, process_data_node, observe_and_evaluate_node, replan_analysis_task_node, generate_report_node
+    
     workflow = StateGraph(AnalysisState)
     
     # 添加节点
@@ -666,6 +682,8 @@ def create_simple_analysis_graph():
     """
     创建简化的分析流程图（仅分步分析，保持向后兼容）
     """
+    from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node
+    
     workflow = StateGraph(AnalysisState)
     
     # 添加节点
@@ -786,6 +804,8 @@ def create_chat_graph():
     """
     创建聊天流程图
     """
+    from .node_handlers import chat_node
+    
     workflow = StateGraph(ChatState)
     
     # 添加节点
@@ -874,6 +894,8 @@ def run_full_analysis(initial_state: AnalysisState):
     Yields:
         tuple: (step_number, step_name, result)
     """
+    from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node
+    
     # 运行任务规划步骤
     state_after_planning = plan_analysis_task_node(initial_state)
     yield (1, "planning", state_after_planning)
