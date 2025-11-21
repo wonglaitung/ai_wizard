@@ -131,68 +131,288 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         }
 
 
-def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
+"""
+LangGraph状态定义和图构建
+用于AI数据透视助手的动态规划分析流程
+"""
+from typing import TypedDict, List, Dict, Any, Optional
+from langgraph.graph import StateGraph, START, END
+from pydantic import BaseModel, Field
+import pandas as pd
+import json
+import logging
+from datetime import datetime
+
+
+logger = logging.getLogger(__name__)
+
+
+class Message(BaseModel):
+    """消息类型定义"""
+    role: str = Field(description="消息角色: user, ai, system")
+    content: str = Field(description="消息内容")
+
+
+class TaskPlan(BaseModel):
+    """任务计划定义"""
+    task_type: str = Field(description="任务类型")
+    columns: List[str] = Field(description="需要分析的列名列表")
+    operations: List[Dict[str, Any]] = Field(description="需要执行的操作列表")
+    expected_output: str = Field(description="预期的输出结果描述")
+
+
+class Observation(BaseModel):
+    """观察结果定义"""
+    results: Dict[str, Any] = Field(description="执行结果")
+    quality_score: float = Field(description="结果质量评分(0-1)")
+    feedback: str = Field(description="结果反馈")
+    success: bool = Field(description="执行是否成功")
+    next_actions: List[str] = Field(description="建议的下一步操作")
+
+
+# 定义动态规划状态类型
+class AnalysisState(TypedDict):
+    """动态分析流程状态定义"""
+    user_message: str
+    file_content: str
+    chat_history: List[Dict[str, str]]
+    settings: Dict[str, Any]
+    output_as_table: bool
+    task_plan: Optional[TaskPlan]
+    computation_results: Optional[Dict[str, Any]]
+    final_report: Optional[str]
+    current_step: str
+    error: Optional[str]
+    api_key: Optional[str]
+    processed: bool  # 标记是否已处理
+    iteration_count: int  # 迭代次数
+    max_iterations: int  # 最大迭代次数
+    observation: Optional[Observation]  # 当前观察结果
+    needs_replanning: bool  # 是否需要重新规划
+    plan_history: List[TaskPlan]  # 历史计划
+
+
+class ChatState(TypedDict):
+    """聊天流程状态定义"""
+    user_message: str
+    file_content: str
+    chat_history: List[Dict[str, str]]
+    settings: Dict[str, Any]
+    output_as_table: bool
+    final_reply: Optional[str]
+    current_step: str
+    error: Optional[str]
+    api_key: Optional[str]
+    processed: bool  # 标记是否已处理
+
+
+def should_continue_iteration(state: AnalysisState) -> str:
     """
-    重新规划节点
-    基于观察结果重新规划分析任务
+    决定是否继续迭代的条件函数
     """
-    from llm_services.analysis_planner import plan_analysis_task
+    from .node_handlers import observe_and_evaluate_node  # 用于类型引用
     
-    start_time = datetime.now()
-    logger.info(f"[{start_time}] 开始重新规划节点处理")
+    iteration_count = state.get("iteration_count", 0)
+    max_iterations = state.get("max_iterations", 3)
+    needs_replanning = state.get("needs_replanning", False)
+    observation = state.get("observation")
     
-    try:
-        user_request = state["user_message"]
-        file_content = state["file_content"]
-        api_key = state["api_key"]
-        observation = state.get("observation")
-        
-        logger.info(f"重新规划 - 用户请求: {user_request[:50]}..." if len(user_request) > 50 else f"重新规划 - 用户请求: {user_request}")
-        logger.info(f"重新规划 - 基于观察结果: {observation.feedback if observation else '无观察结果'}")
-        
-        # 构建更详细的请求上下文，包含观察结果
-        context_request = f"{user_request}\n\n根据之前的分析结果和反馈：{observation.feedback if observation else '无反馈信息'}\n\n请基于以上信息重新规划分析任务。"
-        
-        # 调用任务规划函数
-        task_plan_dict = plan_analysis_task(context_request, file_content, api_key)
-        
-        # 将字典转换为TaskPlan对象
-        task_plan = TaskPlan(
-            task_type=task_plan_dict.get("task_type", "未知任务"),
-            columns=task_plan_dict.get("columns", []),
-            operations=task_plan_dict.get("operations", []),
-            expected_output=task_plan_dict.get("expected_output", "无预期输出")
+    logger.info(f"条件函数检查 - 当前迭代: {iteration_count}, 最大迭代: {max_iterations}")
+    logger.info(f"条件函数检查 - 需要重新规划: {needs_replanning}")
+    if observation:
+        logger.info(f"条件函数检查 - 观察质量评分: {observation.quality_score}, 反馈: {observation.feedback[:50] if observation.feedback else 'N/A'}...")
+    
+    # 如果需要重新规划且未超过最大迭代次数，则继续
+    if needs_replanning and iteration_count < max_iterations:
+        logger.info(f"迭代 {iteration_count + 1}/{max_iterations} - 需要重新规划")
+        return "continue"
+    else:
+        logger.info(f"迭代结束 - 当前迭代: {iteration_count}, 最大迭代: {max_iterations}, 需要重新规划: {needs_replanning}")
+        return "finish"
+
+
+def create_dynamic_analysis_graph():
+    """
+    创建动态规划分析流程图
+    实现规划 → 执行 → 观察 → 重新规划的循环
+    """
+    from .node_handlers import plan_analysis_task_node, process_data_node, observe_and_evaluate_node, replan_analysis_task_node, generate_report_node
+    
+    workflow = StateGraph(AnalysisState)
+    
+    # 添加节点
+    workflow.add_node("plan_analysis", plan_analysis_task_node)
+    workflow.add_node("process_data", process_data_node)
+    workflow.add_node("observe_and_evaluate", observe_and_evaluate_node)
+    workflow.add_node("replan_analysis", replan_analysis_task_node)
+    workflow.add_node("generate_report", generate_report_node)
+    
+    # 设置入口点
+    workflow.add_edge(START, "plan_analysis")
+    
+    # 基本流程: 规划 -> 执行 -> 观察
+    workflow.add_edge("plan_analysis", "process_data")
+    workflow.add_edge("process_data", "observe_and_evaluate")
+    
+    # 根据观察结果决定是否重新规划
+    workflow.add_conditional_edges(
+        "observe_and_evaluate",
+        should_continue_iteration,
+        {
+            "continue": "replan_analysis",  # 需要重新规划
+            "finish": "generate_report"     # 完成分析
+        }
+    )
+    
+    # 重新规划后回到执行阶段
+    workflow.add_edge("replan_analysis", "process_data")
+    
+    # 最终生成报告
+    workflow.add_edge("generate_report", END)
+    
+    return workflow.compile()
+
+
+def create_simple_analysis_graph():
+    """
+    创建简化的分析流程图（仅分步分析，保持向后兼容）
+    """
+    from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node
+    
+    workflow = StateGraph(AnalysisState)
+    
+    # 添加节点
+    workflow.add_node("plan_analysis", plan_analysis_task_node)
+    workflow.add_node("process_data", process_data_node)
+    workflow.add_node("generate_report", generate_report_node)
+    
+    # 定义边
+    workflow.add_edge(START, "plan_analysis")
+    workflow.add_edge("plan_analysis", "process_data")
+    workflow.add_edge("process_data", "generate_report")
+    workflow.add_edge("generate_report", END)
+    
+    return workflow.compile()
+
+
+def create_analysis_graph():
+    """
+    创建分析流程图（现在使用动态规划图作为默认）
+    """
+    return create_dynamic_analysis_graph()
+
+
+def create_chat_graph():
+    """
+    创建聊天流程图
+    """
+    from .node_handlers import chat_node
+    
+    workflow = StateGraph(ChatState)
+    
+    # 添加节点
+    workflow.add_node("chat", chat_node)
+    
+    # 设置入口点和流程
+    workflow.add_edge(START, "chat")
+    workflow.add_edge("chat", END)
+    
+    return workflow.compile()
+
+
+def route_message(state):
+    """
+    决定消息路由的函数
+    """
+    # 如果用户明确要求分步分析，或者有文件内容，或者用户消息中包含分析相关关键词，则进行分步分析
+    needs_step_by_step = (
+        state.get("file_content") and state["file_content"] != '' or
+        any(keyword in state["user_message"].lower() for keyword in 
+            ['分析', '统计', '计算', '数据透视', '报表', '趋势', '对比', '步骤', 'step by step'])
+    )
+    return "step_by_step" if needs_step_by_step else "chat"
+
+
+def create_conditional_graph():
+    """
+    创建条件路由图（使用外部路由逻辑）
+    """
+    from langgraph.graph import END
+    from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node, chat_node
+    
+    analysis_graph_instance = create_analysis_graph()
+    chat_graph_instance = create_chat_graph()
+    
+    def route_and_execute(state: AnalysisState):
+        """
+        根据条件路由到不同的图
+        """
+        needs_step_by_step = (
+            state.get("file_content") and state["file_content"] != '' or
+            any(keyword in state["user_message"].lower() for keyword in 
+                ['分析', '统计', '计算', '数据透视', '报表', '趋势', '对比', '步骤', 'step by step'])
         )
         
-        # 更新计划历史
-        plan_history = state.get("plan_history", [])
-        plan_history.append(task_plan)
-        
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        logger.info(f"[{end_time}] 重新规划完成: {task_plan.task_type}, 耗时: {duration:.2f}秒")
-        logger.info(f"重新规划节点 - 新迭代计数: {state.get('iteration_count', 0) + 1}")
-        
-        return {
-                **state,
-                "task_plan": task_plan,
-                "current_step": "replanning",
+        if needs_step_by_step:
+            # 执行分析图
+            result = analysis_graph_instance.invoke(state)
+            return result
+        else:
+            # 对于聊天，需要将AnalysisState转换为ChatState
+            chat_state: ChatState = {
+                "user_message": state["user_message"],
+                "file_content": state["file_content"],
+                "chat_history": state["chat_history"],
+                "settings": state["settings"],
+                "output_as_table": state["output_as_table"],
+                "final_reply": None,
+                "current_step": "initial",
                 "error": None,
-                "processed": True,
-                "needs_replanning": False,
-                "plan_history": plan_history,
-                "iteration_count": state.get("iteration_count", 0) + 1  # 增加迭代计数
+                "api_key": state["api_key"],
+                "processed": False
             }
-    except Exception as e:
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        logger.error(f"[{end_time}] 重新规划节点出错，耗时: {duration:.2f}秒, 错误: {str(e)}")
-        return {
-            **state,
-            "error": f"重新规划失败: {str(e)}",
-            "current_step": "replanning_error",
-            "processed": True
-        }
+            result = chat_graph_instance.invoke(chat_state)
+            # 将ChatState结果转换回AnalysisState格式
+            return {
+                **state,
+                "final_report": result.get("final_reply"),
+                "current_step": result.get("current_step"),
+                "error": result.get("error"),
+                "processed": result.get("processed", False)
+            }
+    
+    return route_and_execute
+
+
+def run_full_analysis(initial_state: AnalysisState):
+    """
+    运行完整的分析流程并返回中间结果
+    
+    Args:
+        initial_state (AnalysisState): 初始状态
+        
+    Yields:
+        tuple: (step_number, step_name, result)
+    """
+    from .node_handlers import plan_analysis_task_node, process_data_node, generate_report_node
+    
+    # 运行任务规划步骤
+    state_after_planning = plan_analysis_task_node(initial_state)
+    yield (1, "planning", state_after_planning)
+    
+    # 运行数据处理步骤
+    state_after_processing = process_data_node(state_after_planning)
+    yield (2, "processing", state_after_processing)
+    
+    # 运行报告生成步骤
+    final_state = generate_report_node(state_after_processing)
+    yield (3, "reporting", final_state)
+
+
+# 创建全局图实例
+analysis_graph = create_analysis_graph()  # 现在使用动态规划图
+chat_graph = create_chat_graph()
+conditional_graph_executor = create_conditional_graph()
 
 
 def process_data_node(state: AnalysisState) -> AnalysisState:
@@ -252,8 +472,7 @@ def observe_and_evaluate_node(state: AnalysisState) -> AnalysisState:
     观察和评估节点
     评估执行结果并决定是否需要重新规划
     """
-    from llm_services.qwen_engine import chat_with_llm
-    import re
+    from llm_services.observer_evaluator import evaluate_analysis_results, should_replan_analysis
     
     start_time = datetime.now()
     logger.info(f"[{start_time}] 开始观察和评估节点处理")
@@ -268,106 +487,41 @@ def observe_and_evaluate_node(state: AnalysisState) -> AnalysisState:
         api_key = state["api_key"]
         settings = state["settings"]
         
-        # 准备评估提示
-        evaluation_prompt = f"""
-        请评估以下数据分析结果的质量：
-
-        用户请求: {user_message}
-        
-        执行的任务计划:
-        - 任务类型: {task_plan.task_type}
-        - 操作: {task_plan.operations}
-        - 预期输出: {task_plan.expected_output}
-        
-        实际计算结果:
-        {json.dumps(computation_results, ensure_ascii=False, indent=2)}
-        
-        请按照以下格式提供评估：
-        1. 结果质量评分 (0-1的数字)
-        2. 结果是否满足用户需求的判断 (是/否)
-        3. 具体的反馈意见
-        4. 建议的下一步操作
-        
-        请直接以JSON格式输出：
-        {{
-          "quality_score": 0.8,
-          "meets_requirements": true,
-          "feedback": "反馈意见",
-          "success": true,
-          "next_actions": ["建议1", "建议2"]
-        }}
-        """
-        
-        # 调用LLM进行评估
-        model_params = {
-            'model': settings.get('modelName', 'qwen-max'),
-            'temperature': 0.1,  # 评估时使用较低的温度以获得更一致的结果
-            'max_tokens': 1024,
-            'top_p': 0.9,
-            'frequency_penalty': 0.5,
-            'api_key': api_key,
-            'base_url': settings.get('baseUrl', None),
-        }
-        
-        evaluation_result_str = chat_with_llm(evaluation_prompt, **model_params)
-        
-        # 解析评估结果
-        # 尝试从响应中提取JSON
-        json_match = re.search(r'\{.*\}', evaluation_result_str, re.DOTALL)
-        if json_match:
-            evaluation_json = json_match.group(0)
-            evaluation_data = json.loads(evaluation_json)
-            
-            # 创建观察结果对象
-            observation = Observation(
-                results=computation_results,
-                quality_score=evaluation_data.get("quality_score", 0.5),
-                feedback=evaluation_data.get("feedback", "未提供反馈"),
-                success=evaluation_data.get("success", False),
-                next_actions=evaluation_data.get("next_actions", [])
-            )
-            
-            # 判断是否需要重新规划
-            # 如果质量评分低于阈值，或者未满足需求，则需要重新规划
-            needs_replanning = (
-                evaluation_data.get("quality_score", 0.5) < 0.7 or 
-                not evaluation_data.get("meets_requirements", True) or
-                len(evaluation_data.get("next_actions", [])) > 0
-            )
-            
-            logger.info(f"评估完成 - 质量评分: {evaluation_data.get('quality_score', 0.5)}, 需要重新规划: {needs_replanning}")
-            
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds()
-            logger.info(f"[{end_time}] 观察和评估完成，质量评分: {observation.quality_score}, 需要重新规划: {needs_replanning}, 耗时: {duration:.2f}秒")
-            
-            return {
-                **state,
-                "observation": observation,
-                "current_step": "observing",
-                "error": None,
-                "processed": True,
-                "needs_replanning": needs_replanning,
-                "iteration_count": state.get("iteration_count", 0)  # 保持当前迭代计数
-            }
+        # 将TaskPlan对象转换为字典格式，以便observer_evaluator模块处理
+        if hasattr(task_plan, 'dict') and callable(getattr(task_plan, 'dict')):
+            task_plan_dict = task_plan.dict()
+        elif hasattr(task_plan, '__dict__'):
+            task_plan_dict = task_plan.__dict__
         else:
-            # 如果无法解析JSON，返回默认观察结果
-            observation = Observation(
-                results=computation_results,
-                quality_score=0.5,
-                feedback="无法解析评估结果",
-                success=False,
-                next_actions=[]
-            )
-            
-            return {
-                **state,
-                "observation": observation,
-                "current_step": "observing",
-                "error": None,
-                "processed": True,
-                "needs_replanning": True  # 如果无法评估，则需要重新规划
-            }
+            task_plan_dict = task_plan
+        
+        # 使用新的评估模块进行分析结果评估
+        observation = evaluate_analysis_results(
+            task_plan=task_plan_dict,
+            computation_results=computation_results,
+            user_message=user_message,
+            api_key=api_key,
+            settings=settings
+        )
+        
+        # 根据观察结果判断是否需要重新规划
+        needs_replanning = should_replan_analysis(observation)
+        
+        logger.info(f"评估完成 - 质量评分: {observation.quality_score}, 需要重新规划: {needs_replanning}")
+        
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.info(f"[{end_time}] 观察和评估完成，质量评分: {observation.quality_score}, 需要重新规划: {needs_replanning}, 耗时: {duration:.2f}秒")
+        
+        return {
+            **state,
+            "observation": observation,
+            "current_step": "observing",
+            "error": None,
+            "processed": True,
+            "needs_replanning": needs_replanning,
+            "iteration_count": state.get("iteration_count", 0)  # 保持当前迭代计数
+        }
             
     except Exception as e:
         end_time = datetime.now()
