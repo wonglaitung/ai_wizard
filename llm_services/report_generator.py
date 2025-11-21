@@ -56,8 +56,19 @@ def generate_report(task_plan, computation_results, api_key=None, output_as_tabl
 """
     
     try:
+        # 准备模型参数 - 使用默认值或从环境变量获取
+        model_params = {
+            'model': os.getenv('QWEN_MODEL_NAME', 'qwen-max'),
+            'temperature': 0.5,  # 报告生成使用中等温度以平衡创造性和一致性
+            'max_tokens': int(os.getenv('QWEN_MAX_TOKENS', 8196)),
+            'top_p': float(os.getenv('QWEN_TOP_P', 0.9)),
+            'frequency_penalty': float(os.getenv('QWEN_FREQUENCY_PENALTY', 0.5)),
+            'api_key': api_key,
+            'base_url': os.getenv('QWEN_BASE_URL', None)
+        }
+        
         # 调用大模型生成报告
-        report = chat_with_llm(prompt, model="qwen-max", temperature=0.5, api_key=api_key)
+        report = chat_with_llm(prompt, **model_params)
         return report
     except Exception as e:
         return f"生成报告时出错: {str(e)}"

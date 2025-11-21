@@ -74,16 +74,13 @@ def evaluate_analysis_results(task_plan: Dict[str, Any],
     }}
     """
     
-    # 准备模型参数
-    if settings is None:
-        settings = {}
-    
+    # 准备模型参数 - 使用用户配置，但对评估场景进行微调
     model_params = {
         'model': settings.get('modelName', 'qwen-max'),
-        'temperature': 0.1,  # 评估时使用较低的温度以获得更一致的结果
-        'max_tokens': 1024,
-        'top_p': 0.9,
-        'frequency_penalty': 0.5,
+        'temperature': min(settings.get('temperature', 0.7), 0.3),  # 评估时使用较低温度确保一致性
+        'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
+        'top_p': settings.get('topP', 0.9),
+        'frequency_penalty': settings.get('frequencyPenalty', 0.5),
         'api_key': api_key,
         'base_url': settings.get('baseUrl', None),
     }
@@ -130,7 +127,7 @@ def evaluate_analysis_results(task_plan: Dict[str, Any],
         )
 
 
-def should_replan_analysis(observation: Observation, quality_threshold: float = 0.7) -> bool:
+def should_replan_analysis(observation: Observation, quality_threshold: float = 0.8) -> bool:
     """
     根据观察结果决定是否需要重新规划
     
@@ -141,11 +138,12 @@ def should_replan_analysis(observation: Observation, quality_threshold: float = 
     Returns:
         bool: 是否需要重新规划
     """
-    # 如果质量评分低于阈值，或者未满足需求，则需要重新规划
+    # 如果质量评分低于阈值，或者未满足需求，或者反馈表明需要改进，则需要重新规划
     needs_replanning = (
         observation.quality_score < quality_threshold or 
         not observation.success or
-        len(observation.next_actions) > 0
+        len(observation.next_actions) > 0 or
+        "需要重新规划" in observation.feedback
     )
     
     return needs_replanning

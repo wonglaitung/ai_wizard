@@ -106,8 +106,19 @@ def plan_analysis_task(user_request, file_content=None, api_key=None):
 """
     
     try:
+        # 准备模型参数 - 使用默认值或从环境变量获取
+        model_params = {
+            'model': os.getenv('QWEN_MODEL_NAME', 'qwen-max'),
+            'temperature': 0.3,  # 任务规划使用较低的温度以获得更稳定的结果
+            'max_tokens': int(os.getenv('QWEN_MAX_TOKENS', 8196)),
+            'top_p': float(os.getenv('QWEN_TOP_P', 0.9)),
+            'frequency_penalty': float(os.getenv('QWEN_FREQUENCY_PENALTY', 0.5)),
+            'api_key': api_key,
+            'base_url': os.getenv('QWEN_BASE_URL', None)
+        }
+        
         # 调用大模型获取任务规划
-        response = chat_with_llm(prompt, model="qwen-max", temperature=0.3, api_key=api_key)
+        response = chat_with_llm(prompt, **model_params)
         
         # 解析JSON响应
         task_plan = json.loads(response)
