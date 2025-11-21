@@ -21,8 +21,12 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
 
 # 导入LangGraph和相关模块
 try:
-    from langgraph_services.analysis_graph import AnalysisState, ChatState, analysis_graph, chat_graph, conditional_graph_executor
+    from langgraph_services.analysis_graph import AnalysisState, ChatState, get_analysis_graph, get_chat_graph, get_conditional_graph
     from llm_services.qwen_engine import chat_with_llm_stream
+    # 获取图实例
+    analysis_graph = get_analysis_graph()
+    chat_graph = get_chat_graph()
+    conditional_graph_executor = get_conditional_graph()
 except ImportError as e:
     print(f"导入LangGraph或llm_services模块时出错: {e}")
     analysis_graph = None
@@ -99,7 +103,7 @@ def chat():
     app.logger.info('收到聊天API请求')
     app.logger.debug(f'请求头: {dict(request.headers)}')
     
-    if conditional_graph_executor is None:
+    if get_conditional_graph() is None:
         app.logger.error('conditional_graph_executor 未定义，LangGraph服务不可用')
         def error_generator():
             app.logger.debug('生成LangGraph服务不可用错误消息')
@@ -221,7 +225,8 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
                 
                 # 使用LangGraph的流API来获取中间结果
                 step_results = {}
-                for output in analysis_graph.stream(current_state):
+                current_analysis_graph = get_analysis_graph()
+                for output in current_analysis_graph.stream(current_state):
                     # 输出是一个字典，键是节点名称，值是该节点的输出状态
                     for node_name, state in output.items():
                         app.logger.info(f'节点 {node_name} 完成，状态: {state.get("current_step", "unknown")}')
