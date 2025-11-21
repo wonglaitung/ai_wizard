@@ -18,7 +18,6 @@
 ├── NGINX_DEPLOYMENT.md    # Nginx部署说明
 ├── README.md              # 项目说明文档
 ├── requirements.txt       # Python依赖列表
-├── set_key.sh             # 设置API密钥的脚本
 ├── .git/...
 ├── conf/
 │   └── nginx.conf         # Nginx配置文件
@@ -30,7 +29,6 @@
 │   ├── analysis_graph.py  # LangGraph状态定义和节点实现
 │   └── node_handlers.py   # 节点处理器模块
 ├── llm_services/
-│   ├── __init__.py        # 模块初始化文件
 │   ├── cache_manager.py   # 缓存管理器模块
 │   ├── data_processor.py  # 数据处理模块
 │   ├── enhanced_analysis_planner.py # 增强数据分析任务规划器(含缓存和智能学习)
@@ -60,7 +58,7 @@
 13. **分步分析**：将复杂的数据分析任务分解为多个步骤，包括任务规划、数据处理和报告生成。
 14. **API 密钥安全**：支持在配置页面安全设置和显示/隐藏API密钥。
 15. **多工作表数据处理**：支持处理包含多个工作表的Excel文件。
-16. **增强数据处理操作**：提供30多种数据处理操作函数，包括均值、总和、最大值、最小值、计数、百分比、标准差、唯一值、中位数、众数、方差、分位数、范围、首行/末行、缺失值统计、相关性分析等。
+16. **增强数据处理操作**：提供30多种数据处理操作函数，包括均值、总和、最大值、最小值、计数、百分比、标准差、唯一值、中位数、众数、方差、分位数、范围、首行/末行、缺失值统计、相关性分析、分组统计、交叉表、透视表等。
 17. **聊天历史管理**：支持上下文感知的对话历史管理，实现多轮对话。
 18. **API基础URL配置**：支持自定义API基础URL，方便切换不同的服务提供商。
 19. **滑块参数实时显示**：配置页面的滑块参数（温度、Top P、频率惩罚）实时显示当前值。
@@ -73,6 +71,10 @@
 26. **智能学习机制**：增强规划器能够从历史规划中学习，减少不必要的重规划周期。
 27. **质量评估系统**：观察与评估模块能够从业务价值角度评估分析结果质量。
 28. **改进的重规划流程**：使用缓存和历史学习来优化重规划决策，提高规划质量。
+29. **多维度分析**：支持按多个维度进行数据透视分析，包括分组统计、交叉表和透视表功能。
+30. **业务洞察分析**：从商业角度提供数据透视和业务洞察分析，不仅限于技术层面的数据处理。
+31. **操作注册器模式**：使用装饰器模式实现操作函数的注册和管理，便于扩展新的数据处理操作。
+32. **错误处理和日志记录**：全面的错误处理机制和日志记录功能，便于调试和维护。
 
 ## 技术栈
 
@@ -85,6 +87,7 @@
 - **图表库**：Chart.js
 - **Markdown 解析**：marked.js
 - **部署**：Docker, Nginx
+- **模型类型定义**：Pydantic
 
 ## 安装与运行
 
@@ -101,6 +104,13 @@ pip install -r requirements.txt
 ```bash
 export QWEN_API_KEY=your_api_key_here
 export QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选，自定义API基础URL
+export QWEN_MODEL_NAME=qwen-max  # 可选，指定模型名称
+export QWEN_TEMPERATURE=0.7  # 可选，温度参数
+export QWEN_MAX_TOKENS=8196  # 可选，最大Token数
+export QWEN_TOP_P=0.9  # 可选，Top P参数
+export QWEN_FREQUENCY_PENALTY=0.5  # 可选，频率惩罚参数
+export QUALITY_THRESHOLD=0.85  # 可选，动态规划质量阈值
+export LOG_LEVEL=INFO  # 可选，设置日志级别
 ```
 
 或者在配置页面中直接设置 API 密钥。
@@ -153,6 +163,7 @@ docker run -d -p 5005:5005 \
   -e QWEN_TOP_P=0.9 \
   -e QWEN_FREQUENCY_PENALTY=0.5 \
   -e QUALITY_THRESHOLD=0.85 \
+  -e LOG_LEVEL=INFO \
   ai-wizard
 ```
 
@@ -197,12 +208,14 @@ Flask 应用的主文件，负责：
 - 实现观察和评估机制，根据分析结果质量决定是否继续迭代
 - 支持条件图路由，根据请求类型自动选择合适的处理流程
 - 优化动态规划流程，实现基于质量评分的提前终止机制
+- 实现条件路由逻辑，根据用户消息和文件内容判断使用分步分析还是普通聊天流程
 
 ### `langgraph_services/analysis_graph.py`
 
 LangGraph状态定义和节点实现模块，负责：
 
 - 定义 `AnalysisState` 状态类型，包含用户消息、文件内容、任务计划、计算结果等
+- 定义 `ChatState` 状态类型，用于普通聊天流程
 - 实现任务规划节点，将用户请求转换为具体的分析任务
 - 实现数据处理节点，根据任务计划执行具体的数据处理操作
 - 实现报告生成节点，整合计算结果并生成最终分析报告
@@ -216,6 +229,8 @@ LangGraph状态定义和节点实现模块，负责：
 - 添加迭代控制逻辑，支持最多3轮迭代优化
 - 实现迭代计数和迭代条件判断功能
 - 添加质量评分和反馈机制，用于判断是否需要重新规划
+- 实现条件路由图，根据消息内容自动选择分析流程或聊天流程
+- 定义 `Message`, `TaskPlan`, `Observation` 等Pydantic模型用于类型检查
 
 ### `langgraph_services/node_handlers.py`
 
@@ -231,6 +246,9 @@ LangGraph状态定义和节点实现模块，负责：
 - 提供改进的分析流程管理，优化节点间的数据流转
 - 实现智能学习机制，从历史规划中提取改进策略
 - 包含错误处理和日志记录功能
+- 实现 `_analyze_improvement_areas` 函数，分析需要改进的领域
+- 实现 `_build_enhanced_request` 函数，构建增强的重规划请求
+- 包含改进的重规划节点逻辑，减少不必要的重规划周期
 
 ### `llm_services/enhanced_analysis_planner.py`
 
@@ -246,6 +264,9 @@ LangGraph状态定义和节点实现模块，负责：
 - 增加缓存机制，避免重复的模型调用
 - 包含智能初始规划系统，从历史迭代中学习
 - 提供质量提升的规划算法，减少重规划周期
+- 实现 `EnhancedAnalysisPlanner` 类，封装规划逻辑
+- 使用操作注册表检查支持的操作
+- 包含业务视角的分析建议
 
 ### `llm_services/observer_evaluator.py`
 
@@ -259,6 +280,9 @@ LangGraph状态定义和节点实现模块，负责：
 - 实现智能决策机制，决定下一步操作
 - 支持质量阈值配置，可自定义评估标准
 - 提供反馈循环，帮助改进未来分析
+- 实现 `Observation` Pydantic模型定义评估结果格式
+- 实现 `evaluate_analysis_results` 函数进行结果评估
+- 实现 `should_replan_analysis` 函数决定是否需要重新规划
 
 ### `llm_services/cache_manager.py`
 
@@ -272,6 +296,8 @@ LangGraph状态定义和节点实现模块，负责：
 - 优化系统响应速度和资源利用
 - 提供缓存统计信息和管理接口
 - 支持可配置的缓存参数
+- 实现 `CacheManager` 类管理缓存逻辑
+- 提供 `get_cache_manager` 工厂函数获取缓存实例
 
 ### `llm_services/data_processor.py`
 
@@ -289,8 +315,12 @@ LangGraph状态定义和节点实现模块，负责：
   - 数据质量：missing_count, missing_percentage
   - 数据特征：unique, first, last
   - 关联分析：correlation
+  - 高级分析：group_by, cross_tab, pivot_table, aggregate
 - 支持工作表名.列名格式的多工作表数据访问
 - 实现数据类型自动转换和错误处理
+- 使用 `@register_operation` 装饰器注册操作函数
+- 实现 `parse_multi_sheet_data` 函数处理多工作表数据
+- 支持多维度数据透视分析功能
 
 ### `llm_services/qwen_engine.py`
 
@@ -306,6 +336,8 @@ Qwen 模型的接口文件，包含：
 - 支持UTF-8编码处理
 - 实现更安全的API密钥管理
 - 添加更详细的错误信息返回
+- 实现流式和非流式两种响应模式
+- 包含详细的日志记录功能
 
 ### `llm_services/report_generator.py`
 
@@ -317,6 +349,8 @@ Qwen 模型的接口文件，包含：
 - 包含对计算结果的解释、关键发现、趋势分析和建议
 - 支持表格格式输出模式
 - 从业务角度提供数据洞察和行动建议
+- 根据 `output_as_table` 参数决定输出格式
+- 生成专业的业务数据透视分析报告
 
 ### `main.html`
 
@@ -330,6 +364,8 @@ Qwen 模型的接口文件，包含：
 - 包含必要的脚本引入和初始化代码
 - 改进的响应式设计
 - 优化的布局和用户体验
+- 包含文件上传和预览功能
+- 包含图表输出切换功能
 
 ### `css/styles.css`
 
@@ -350,6 +386,9 @@ Qwen 模型的接口文件，包含：
 - 滑块样式优化，支持实时值显示
 - 文件上传区域样式改进
 - 专业级UI组件设计
+- 专业输出消息样式
+- 图表控制面板样式
+- 配置页面专业样式
 
 ### `scripts/script.js`
 
@@ -381,6 +420,10 @@ Qwen 模型的接口文件，包含：
 - 迭代分析结果的显示和处理
 - 步骤4及最终报告的正确显示
 - 对象类型结果的安全解析和显示
+- 统一的响应数据处理函数 `handleResponseData`
+- 支持分步分析和动态规划分析的响应处理
+- 实现 `estimateTokenCount` 函数估算token数量
+- 实现图表导出为图片功能
 
 ### `scripts/chart.js`
 
@@ -427,14 +470,6 @@ Python依赖列表，包含：
 - langgraph (0.0.60)
 - langchain-core>=0.2,<0.3
 - pydantic (2.5.0)
-
-### `set_key.sh`
-
-设置API密钥的脚本，用于安全地设置环境变量，包含：
-
-- API密钥和其他环境变量的设置
-- 邮件配置选项（可选）
-- 安全的密钥管理建议
 
 ## API 接口
 
@@ -526,6 +561,19 @@ Python依赖列表，包含：
 - `needs_replanning`: 是否需要重新规划
 - `plan_history`: 历史计划
 
+`ChatState` 是普通聊天流程的状态结构：
+
+- `user_message`: 用户输入的消息
+- `file_content`: 上传的文件内容
+- `chat_history`: 聊天历史记录
+- `settings`: AI模型配置参数
+- `output_as_table`: 是否以表格形式输出
+- `final_reply`: 最终回复
+- `current_step`: 当前处理步骤
+- `error`: 错误信息
+- `api_key`: API密钥
+- `processed`: 标记是否已处理
+
 ### 节点功能
 
 1. **任务规划节点** (`plan_analysis_task_node`): 将用户的数据分析请求转换为具体的计算任务
@@ -551,6 +599,7 @@ Python依赖列表，包含：
 - 根据评估结果的质量评分决定是否继续迭代
 - 观察和评估节点根据结果质量、反馈和建议的下一步操作来决定是否需要重新规划
 - 支持基于质量阈值的提前终止机制，避免不必要的迭代
+- 使用缓存和历史学习优化重规划决策
 
 ## 开发约定
 
@@ -588,3 +637,6 @@ Python依赖列表，包含：
 - 实现了智能学习机制，从历史规划中学习以减少重新规划
 - 支持质量评估和反馈循环，持续改进分析结果
 - 实现了改进的重规划节点，使用缓存和历史学习优化规划质量
+- 使用操作注册器模式，便于扩展新的数据处理操作
+- 实现多维度数据透视分析功能，支持分组统计、交叉表和透视表
+- 从商业角度提供数据透视和业务洞察分析

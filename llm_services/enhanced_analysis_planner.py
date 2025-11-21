@@ -130,27 +130,42 @@ class EnhancedAnalysisPlanner:
 
 示例输出格式：
 {{
-    "task_type": "业务指标分析",
-    "columns": ["销售额", "日期"],
+    "task_type": "数据分析",
+    "columns": ["数值列1", "分类列1"],
     "operations": [
-        {{"name": "sum", "column": "销售额", "description": "计算销售额的总和，了解业务总体规模"}},
-        {{"name": "mean", "column": "销售额", "description": "计算销售额的平均值，了解平均水平"}},
-        {{"name": "max", "column": "销售额", "description": "找出销售额的最大值，识别最佳表现"}}
+        {{"name": "sum", "column": "数值列1", "description": "计算指定列的总和"}},
+        {{"name": "mean", "column": "数值列1", "description": "计算指定列的平均值"}},
+        {{"name": "max", "column": "数值列1", "description": "找出指定列的最大值"}}
     ],
-    "expected_output": "输出销售额的总和、平均值和最大值，帮助理解业务规模和表现",
-    "rationale": "基于用户请求和数据特征，选择总和、平均值和最大值来全面了解业务规模和表现"
+    "expected_output": "输出指定列的总和、平均值和最大值",
+    "rationale": "基于用户请求和数据特征，选择适当的统计操作"
 }}
 
-对于多维度交叉分析（如按国家和地区、客户类型等多维度分析交易数据），请使用以下格式：
+对于多维度交叉分析，请使用以下格式：
 {{
     "task_type": "多维度交叉分析",
-    "columns": ["国家/地区", "客户类型", "交易金额"],
+    "columns": ["分类列1", "分类列2", "数值列1"],
     "operations": [
-        {{"name": "group_by", "column": ["国家/地区", "客户类型"], "description": "按国家/地区和客户类型分组，计算交易金额的总和、平均值等统计指标"}},
-        {{"name": "pivot_table", "column": {{"index": "国家/地区", "columns": "客户类型", "values": "交易金额", "aggfunc": "sum"}}, "description": "创建透视表展示不同国家/地区和客户类型的交易金额汇总"}}
+        {{"name": "group_by", "column": ["分类列1", "分类列2"], "description": "按指定的分类列进行分组统计"}},
+        {{"name": "pivot_table", "column": {{"index": "分类列1", "columns": "分类列2", "values": "数值列1", "aggfunc": "sum"}}, "description": "创建透视表进行多维度汇总分析"}},
+        {{"name": "cross_tab", "column": ["分类列1", "分类列2"], "description": "创建交叉表分析两个分类变量之间的关系"}}
     ],
-    "expected_output": "输出按国家/地区和客户类型分组的交易金额汇总，帮助理解不同维度下的业务表现",
-    "rationale": "基于多维度分析需求，使用分组和透视表来展示不同维度下的业务表现"
+    "expected_output": "输出多维度的分组统计结果",
+    "rationale": "基于多维度分析需求，使用分组、透视表和交叉表来展示不同维度下的数据特征"
+}}
+
+对于多工作表数据的交叉分析，请使用以下格式：
+{{
+    "task_type": "多工作表数据分析",
+    "columns": ["工作表1数据列", "工作表2数据列", "分类列"],
+    "operations": [
+        {{"name": "group_by", "column": ["分类列"], "description": "按分类列分组进行统计"}},
+        {{"name": "cross_tab", "column": ["工作表1数据列", "工作表2数据列"], "description": "创建交叉表分析两个工作表间数据的关系"}},
+        {{"name": "count", "column": "工作表1数据列", "description": "计算工作表1的数据总数"}},
+        {{"name": "count", "column": "工作表2数据列", "description": "计算工作表2的数据总数"}}
+    ],
+    "expected_output": "输出各工作表数据的对比分析结果",
+    "rationale": "基于多工作表对比分析需求，使用分组统计和交叉表来展示不同工作表间的数据关系"
 }}
 
 请严格按照上述JSON格式输出，不要包含其他内容。
