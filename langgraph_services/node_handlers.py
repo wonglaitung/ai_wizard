@@ -32,7 +32,9 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         plan_history = state.get("plan_history", [])
         plan_history_dicts = []
         for plan in plan_history:
-            if hasattr(plan, 'dict'):
+            if hasattr(plan, 'model_dump'):
+                plan_history_dicts.append(plan.model_dump())
+            elif hasattr(plan, 'dict'):
                 plan_history_dicts.append(plan.dict())
             elif isinstance(plan, dict):
                 plan_history_dicts.append(plan)
@@ -127,7 +129,9 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         plan_history = state.get("plan_history", [])
         plan_history_dicts = []
         for plan in plan_history:
-            if hasattr(plan, 'dict'):
+            if hasattr(plan, 'model_dump'):
+                plan_history_dicts.append(plan.model_dump())
+            elif hasattr(plan, 'dict'):
                 plan_history_dicts.append(plan.dict())
             elif isinstance(plan, dict):
                 plan_history_dicts.append(plan)
@@ -354,7 +358,9 @@ def observe_and_evaluate_node(state: AnalysisState) -> AnalysisState:
         settings = state["settings"]
 
         # 将TaskPlan对象转换为字典格式，以便observer_evaluator模块处理
-        if hasattr(task_plan, 'dict') and callable(getattr(task_plan, 'dict')):
+        if hasattr(task_plan, 'model_dump') and callable(getattr(task_plan, 'model_dump')):
+            task_plan_dict = task_plan.model_dump()
+        elif hasattr(task_plan, 'dict') and callable(getattr(task_plan, 'dict')):
             task_plan_dict = task_plan.dict()
         elif hasattr(task_plan, '__dict__'):
             task_plan_dict = task_plan.__dict__

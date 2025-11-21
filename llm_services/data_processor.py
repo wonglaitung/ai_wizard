@@ -43,24 +43,37 @@ def parse_multi_sheet_data(text_data):
     parsed_dataframes = {}
     
     for line in lines:
-        if line.startswith('工作表: '):
+        if line.startswith('工作表: ') or line.startswith('Sheet: '):
             # 如果之前有数据，保存之前的表格
             if current_sheet_name and sheet_data:
                 try:
                     # 将数据转换为DataFrame
                     df_str = '\n'.join(sheet_data)
-                    df = pd.read_csv(StringIO(df_str), sep='\s+', engine='python')
+                    # 检查数据中是否包含管道符，优先使用管道符分隔
+                    if '|' in df_str:
+                        df = pd.read_csv(StringIO(df_str), sep='|')
+                    else:
+                        # 如果没有管道符，尝试使用空格分隔
+                        df = pd.read_csv(StringIO(df_str), sep='\s+', engine='python')
                     parsed_dataframes[current_sheet_name] = df
                 except:
                     # 如果解析失败，尝试其他方法
                     try:
-                        df = pd.read_csv(StringIO(df_str))
+                        # 再次检查是否包含管道符
+                        df_str = '\n'.join(sheet_data)
+                        if '|' in df_str:
+                            df = pd.read_csv(StringIO(df_str), sep='|')
+                        else:
+                            df = pd.read_csv(StringIO(df_str))
                         parsed_dataframes[current_sheet_name] = df
                     except:
                         logger.error(f"无法解析工作表 {current_sheet_name} 的数据")
                         
-            # 开始新工作表
-            current_sheet_name = line.split('工作表: ')[1].strip()
+            # 开始新工作表 - handle both Chinese and English formats
+            if line.startswith('工作表: '):
+                current_sheet_name = line.split('工作表: ')[1].strip()
+            elif line.startswith('Sheet: '):
+                current_sheet_name = line.split('Sheet: ')[1].strip()
             sheet_data = []
         else:
             # 如果不是空行，添加到当前工作表数据
@@ -71,11 +84,20 @@ def parse_multi_sheet_data(text_data):
     if current_sheet_name and sheet_data:
         try:
             df_str = '\n'.join(sheet_data)
-            df = pd.read_csv(StringIO(df_str), sep='\s+', engine='python')
+            # 检查数据中是否包含管道符，优先使用管道符分隔
+            if '|' in df_str:
+                df = pd.read_csv(StringIO(df_str), sep='|')
+            else:
+                df = pd.read_csv(StringIO(df_str), sep='\s+', engine='python')
             parsed_dataframes[current_sheet_name] = df
         except:
             try:
-                df = pd.read_csv(StringIO(df_str))
+                # 再次检查是否包含管道符
+                df_str = '\n'.join(sheet_data)
+                if '|' in df_str:
+                    df = pd.read_csv(StringIO(df_str), sep='|')
+                else:
+                    df = pd.read_csv(StringIO(df_str))
                 parsed_dataframes[current_sheet_name] = df
             except:
                 logger.error(f"无法解析工作表 {current_sheet_name} 的数据")
@@ -122,8 +144,15 @@ def process_data(task_plan, file_content=None):
             except:
                 pass
                 
-            # 检查第一行是否包含制表符，如果是则强制使用制表符分隔
-            if file_content and '\t' in file_content.split('\n')[0]:
+            # 检查第一行是否包含管道符，如果是则优先使用管道符分隔
+            if file_content and '|' in file_content.split('\n')[0]:
+                try:
+                    # 强制使用管道符分隔
+                    df = pd.read_csv(StringIO(file_content), sep='|')
+                except:
+                    pass
+            # 检查第一行是否包含制表符，如果是则使用制表符分隔
+            elif file_content and '\t' in file_content.split('\n')[0]:
                 try:
                     # 强制使用制表符分隔
                     df = pd.read_csv(StringIO(file_content), sep='\t')
@@ -278,7 +307,55 @@ def process_data(task_plan, file_content=None):
     
     # 如果是多工作表数据，需要特殊处理
     if multi_sheet_data:
-        # 对于多工作表数据，我们需要处理"工作表名.列名"格式的列引用
+        # 对于需要合并工作表数据的操作（如交叉分析），创建合并的数据集
+        all_dfs = []
+        
+        # 分析所有工作表，将它们按行合并，并添加工作表来源标识
+        for sheet_name, sheet_df in multi_sheet_data.items():
+            # 重命名列以区分不同工作表的同类数据
+            renamed_df = sheet_df.copy()
+            
+            # Standardize column names to ensure consistent semantic meaning
+            new_columns = {}
+            for col in renamed_df.columns:
+                # Generic logic to handle similar columns across sheets
+                # Look for potential duplicates and add sheet identifier
+                duplicate_found = False
+                for other_sheet_name, other_sheet_df in multi_sheet_data.items():
+                    if other_sheet_name != sheet_name:
+                        for other_col in other_sheet_df.columns:
+                            # Check if columns are semantically similar
+                            if (col == other_col or 
+                                col.replace(" ", "").replace("_", "").lower() == other_col.replace(" ", "").replace("_", "").lower() or 
+                                col in other_col or other_col in col):
+                                duplicate_found = True
+                                break
+                        if duplicate_found:
+                            break
+                
+                if duplicate_found:
+                    # Add sheet name as suffix to distinguish between sheets
+                    new_columns[col] = f"{col}_{sheet_name}"
+                else:
+                    # Keep original name if not duplicated
+                    new_columns[col] = col
+            
+            renamed_df = renamed_df.rename(columns=new_columns)
+            renamed_df['_source_sheet'] = sheet_name  # 添加来源工作表标识
+            all_dfs.append(renamed_df)
+        
+        # 合并所有工作表的数据
+        if all_dfs:
+            try:
+                # 按行合并所有工作表的数据，使用外连接保留所有列
+                df = pd.concat(all_dfs, ignore_index=True, sort=False)
+            except Exception as e:
+                logger.warning(f"合并工作表数据时出错，使用第一个工作表: {str(e)}")
+                df = list(multi_sheet_data.values())[0] if multi_sheet_data else pd.DataFrame()
+        else:
+            df = list(multi_sheet_data.values())[0] if multi_sheet_data else pd.DataFrame()
+        
+        # 对于特定工作表的操作，仍保留原有逻辑
         processed_operations = []
         for op in operations:
             op_column = op.get("column")
@@ -1223,19 +1300,100 @@ def cross_tab_operation(df, columns):
         for col in columns[:2]:  # 只取前两列
             found = False
             for df_col in df.columns:
-                if col == df_col or col in df_col or df_col in col:
+                # 使用更灵活的匹配策略，特别针对管道符分隔的数据
+                if col == df_col or col in df_col or df_col in col or df_col.strip() == col.strip():
                     existing_cols.append(df_col)
                     found = True
                     break
             if not found:
-                missing_cols.append(col)
+                # 尝试更智能的匹配，处理合并后可能的列名变化
+                for df_col in df.columns:
+                    df_col_lower = df_col.lower()
+                    col_lower = col.lower()
+                    # 通用列匹配逻辑 - instead of hardcoded business terms, use common data patterns
+                    # Check if columns have similar semantic meaning using general patterns
+                    if (col_lower == df_col_lower or 
+                        col_lower in df_col_lower or 
+                        df_col_lower in col_lower or
+                        # General matching for common data types
+                        (any(keyword in col_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"]) and 
+                         any(keyword in df_col_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"])) or
+                        (any(keyword in col_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"]) and 
+                         any(keyword in df_col_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"])) or
+                        (any(keyword in col_lower for keyword in ["date", "time", "日期", "时间", "period", "期间"]) and 
+                         any(keyword in df_col_lower for keyword in ["date", "time", "日期", "时间", "period", "期间"])) or
+                        (any(keyword in col_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"]) and 
+                         any(keyword in df_col_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"]))):
+                        existing_cols.append(df_col)
+                        found = True
+                        break
+                if not found:
+                    missing_cols.append(col)
         
         if missing_cols:
-            return {"error": f"找不到以下列: {missing_cols}"}
+            # 尝试更通用的列匹配策略，不针对特定月份进行硬编码
+            for missing_col in missing_cols[:]:  # 使用副本以安全地修改原列表
+                # 查找与缺失列具有相似名称或关键词的列
+                for available_col in df.columns:
+                    if available_col == "_source_sheet":  # 跳过来源列
+                        continue
+                        
+                    available_lower = available_col.lower()
+                    missing_lower = missing_col.lower()
+                    
+                    # 通用匹配逻辑 without hardcoded business terms
+                    if (any(keyword in missing_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"]) and 
+                        any(keyword in available_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"])) or \
+                       (any(keyword in missing_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"]) and 
+                        any(keyword in available_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"])) or \
+                       (any(keyword in missing_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"]) and 
+                        any(keyword in available_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"])):
+                        # 检查是否避免重复添加
+                        if available_col not in existing_cols:
+                            existing_cols.append(available_col)
+                            missing_cols.remove(missing_col)
+                            break
+            
+            if missing_cols:
+                return {"error": f"找不到以下列: {missing_cols}. 可用的列: {list(df.columns)}"}
+        
+        # 确保找到至少两列用于交叉表
+        if len(existing_cols) < 2:
+            # 尝试更智能的列匹配
+            available_cols = [col for col in df.columns if col != "_source_sheet"]  # 排除来源列
+            
+            if len(available_cols) >= 2:
+                # 如果可用列足够，使用前两个
+                existing_cols = available_cols[:2]
+            elif len(available_cols) == 1:
+                # 如果只有一个可用列，使用该列两次（虽然这在交叉表中可能没有意义）
+                existing_cols = [available_cols[0], available_cols[0]]
+            else:
+                return {"error": f"交叉表操作需要至少两列数据，但只找到 {len(existing_cols)} 列: {existing_cols}"}
+        
+        # 确保我们有至少两个不同的列用于交叉表
+        if len(existing_cols) >= 2:
+            # 如果两个列名相同，尝试使用不同的列
+            if existing_cols[0] == existing_cols[1]:
+                available_cols = [col for col in df.columns if col != existing_cols[0] and col != "_source_sheet"]
+                if available_cols:
+                    existing_cols[1] = available_cols[0]
+        
+        # 确保找到至少两列用于交叉表
+        if len(existing_cols) < 2:
+            return {"error": f"交叉表操作需要至少两列数据，但只找到 {len(existing_cols)} 列: {existing_cols}"}
         
         try:
+            # 检查数据是否有效
+            if df[existing_cols[0]].empty or df[existing_cols[1]].empty:
+                return {"error": f"列 '{existing_cols[0]}' 或 '{existing_cols[1]}' 数据为空"}
+            
+            # 确保数据类型兼容交叉表操作
+            series1 = df[existing_cols[0]].fillna('')  # 填充空值
+            series2 = df[existing_cols[1]].fillna('')  # 填充空值
+            
             # 创建交叉表
-            crosstab = pd.crosstab(df[existing_cols[0]], df[existing_cols[1]], margins=True)
+            crosstab = pd.crosstab(series1, series2, margins=True)
             
             # 转换为字典格式，确保所有键都是字符串
             crosstab_dict = crosstab.to_dict()
@@ -1257,14 +1415,32 @@ def cross_tab_operation(df, columns):
             result["计数"] = convert_keys_to_str(crosstab_dict)
             
             # 同时计算百分比
-            crosstab_pct = pd.crosstab(df[existing_cols[0]], df[existing_cols[1]], normalize='all', margins=True) * 100
+            crosstab_pct = pd.crosstab(series1, series2, normalize='all', margins=True) * 100
             result["百分比"] = convert_keys_to_str(crosstab_pct.to_dict())
             
             return result
         except Exception as e:
             return {"error": f"交叉表操作失败: {str(e)}"}
     else:
-        return {"error": "交叉表操作需要指定两列数据，请使用列表格式"}
+        # 如果传入的是字符串而不是列表，尝试进行更智能的处理
+        # 检查是否是包含分隔符的字符串，如果是则尝试分割
+        if isinstance(columns, str):
+            # 检查字符串中是否包含分隔符（逗号、管道符、分号等），并尝试分割
+            if ',' in columns:
+                split_cols = [col.strip() for col in columns.split(',')]
+            elif '|' in columns:
+                split_cols = [col.strip() for col in columns.split('|')]
+            elif ';' in columns:
+                split_cols = [col.strip() for col in columns.split(';')]
+            else:
+                # 如果没有找到常见分隔符，尝试使用空格（虽然在管道符分隔的数据中不太可能）
+                split_cols = [col.strip() for col in columns.split()]
+            
+            if len(split_cols) >= 2:
+                # 使用分割后的列名重新调用函数
+                return cross_tab_operation(df, split_cols)
+        
+        return {"error": "交叉表操作需要指定两列数据，请使用列表格式或用逗号/管道符/分号分隔的列名字符串"}
 
 
 @register_operation("aggregate")

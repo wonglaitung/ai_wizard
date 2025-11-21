@@ -243,7 +243,7 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
                                 yield 'data: ' + json.dumps({
                                     'step': 1, 
                                     'message': f'{plan_type}完成，迭代 {iteration + 1}',
-                                    'result': task_plan.dict() if hasattr(task_plan, 'dict') else task_plan
+                                    'result': task_plan.model_dump() if hasattr(task_plan, 'model_dump') else (task_plan.dict() if hasattr(task_plan, 'dict') else task_plan)
                                 }) + '\n\n'
                                 yield 'data: ' + json.dumps({'step': 2, 'message': f'第 {iteration + 1} 轮处理数据...'}) + '\n\n'
                         elif node_name == "process_data":
@@ -423,16 +423,18 @@ def extract_text_from_file(filepath, filename):
     elif file_extension in ['csv']:
         import pandas as pd
         df = pd.read_csv(filepath)
-        return df.to_string()
+        # 使用管道符分隔以确保后续处理的一致性
+        return df.to_csv(sep='|', index=False)
     elif file_extension in ['xlsx']:
         import pandas as pd
         # 读取所有工作表
         all_sheets = pd.read_excel(filepath, sheet_name=None)
-        # 将所有工作表连接成一个字符串
+        # 将所有工作表连接成一个字符串，使用管道符分隔以确保后续处理的一致性
         sheet_strings = []
         for sheet_name, df in all_sheets.items():
-            sheet_strings.append(f"工作表: {sheet_name}")
-            sheet_strings.append(df.to_string())
+            sheet_strings.append(f"Sheet: {sheet_name}")
+            # 使用管道符分隔以确保后续处理的一致性
+            sheet_strings.append(df.to_csv(sep='|', index=False))
             sheet_strings.append("")  # 添加空行分隔
         return "\n".join(sheet_strings)
     elif file_extension == 'docx':
