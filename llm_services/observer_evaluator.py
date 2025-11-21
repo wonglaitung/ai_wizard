@@ -39,37 +39,38 @@ def evaluate_analysis_results(task_plan: Dict[str, Any],
     """
     # 准备评估提示
     evaluation_prompt = f"""
-    请评估以下数据分析结果的质量：
+    请从商业价值和业务洞察角度深入评估以下数据分析结果的质量：
 
-    用户请求: {user_message}
-    
-    执行的任务计划:
-    - 任务类型: {task_plan.get('task_type', '未知任务') if isinstance(task_plan, dict) else getattr(task_plan, 'task_type', '未知任务')}
-    - 操作: {task_plan.get('operations', []) if isinstance(task_plan, dict) else getattr(task_plan, 'operations', [])}
-    - 预期输出: {task_plan.get('expected_output', '无预期输出') if isinstance(task_plan, dict) else getattr(task_plan, 'expected_output', '无预期输出')}
-    
-    实际计算结果:
+    用户原始请求: {user_message}
+
+    执行的分析计划:
+    - 分析类型: {task_plan.get('task_type', '未知任务')}
+    - 执行的操作: {task_plan.get('operations', [])}
+    - 期望的业务洞察: {task_plan.get('expected_output', '无预期输出')}
+
+    实际分析结果:
     {json.dumps(computation_results, ensure_ascii=False, indent=2)}
-    
-    请按照以下格式提供评估：
-    1. 结果质量评分 (0-1的数字)
-    2. 结果是否满足用户需求的判断 (是/否)
-    3. 具体的反馈意见
-    4. 建议的下一步操作
-    
+
+    请从以下维度进行评估：
+
+    1. **业务洞察质量** - 分析是否揭示了有价值的业务模式、趋势或异常
+    2. **用户需求满足度** - 结果是否直接回答了用户的核心业务问题
+    3. **数据完整性** - 分析是否全面覆盖了相关维度和指标
+    4. **实际应用价值** - 结果是否支持业务决策和行动
+
     评估标准：
-    - 结果与用户需求的匹配度
-    - 数据分析的深度和业务洞察
-    - 结果的可读性和实用性
-    - 是否存在需要进一步分析的方面
-    
-    请直接以JSON格式输出：
+    - 高质量 (0.9-1.0): 深刻洞察、高度相关、直接支持决策
+    - 中高质量 (0.7-0.89): 有价值洞察、基本满足需求、有一定决策支持
+    - 中等质量 (0.5-0.69): 基本分析完成、部分满足需求、洞察有限
+    - 低质量 (0.0-0.49): 分析浅显、偏离需求、缺乏洞察
+
+    请严格按照以下JSON格式输出：
     {{
       "quality_score": 0.8,
       "meets_requirements": true,
-      "feedback": "反馈意见",
+      "feedback": "详细反馈，包括业务发现、分析优点、不足之处",
       "success": true,
-      "next_actions": ["建议1", "建议2"]
+      "next_actions": ["具体改进建议或下一步操作"]
     }}
     """
     
