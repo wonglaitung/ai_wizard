@@ -108,6 +108,21 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         current_task_plan = state.get("task_plan")
         computation_results = state.get("computation_results")
 
+        # 检查质量评分是否已满足要求，如果是则跳过重规划
+        quality_threshold = float(os.getenv('QUALITY_THRESHOLD', 0.85))
+        if observation and observation.quality_score >= quality_threshold:
+            logger.info(f"质量评分 {observation.quality_score} >= {quality_threshold}，满足要求，跳过重规划")
+            # 直接返回当前状态，不进行重规划
+            iteration_count = state.get("iteration_count", 0) + 1
+            return {
+                **state,
+                "current_step": "replanning_skipped",  # 标记跳过重规划
+                "error": None,
+                "processed": True,
+                "needs_replanning": False,
+                "iteration_count": iteration_count
+            }
+
         # 获取历史规划记录（转换为字典格式供增强规划器使用）
         plan_history = state.get("plan_history", [])
         plan_history_dicts = []

@@ -216,6 +216,7 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
             
             iteration = 0
             max_iterations = current_state.get("max_iterations", 3)
+            quality_threshold = float(os.getenv('QUALITY_THRESHOLD', 0.85))  # 设置质量阈值
             
             while iteration < max_iterations:
                 app.logger.info(f'开始迭代 {iteration + 1}/{max_iterations}')
@@ -259,6 +260,25 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
                             observation = state.get("observation")
                             if observation:
                                 needs_replanning = state.get("needs_replanning", False)
+                                
+                                # 检查质量评分是否已满足要求，如果是则提前终止迭代
+                                if observation.quality_score >= quality_threshold:
+                                    app.logger.info(f'质量评分 {observation.quality_score} >= {quality_threshold}，满足要求，提前终止迭代')
+                                    yield 'data: ' + json.dumps({
+                                        'step': 3,
+                                        'message': f'质量评分 {observation.quality_score:.2f} 满足要求，提前终止迭代，准备生成报告',
+                                        'result': {
+                                            'quality_score': observation.quality_score,
+                                            'feedback': observation.feedback,
+                                            'success': observation.success,
+                                            'next_actions': observation.next_actions,
+                                            'needs_replanning': False
+                                        }
+                                    }) + '\n\n'
+                                    # 设置不需要重新规划，以便跳出迭代循环直接生成报告
+                                    current_state["needs_replanning"] = False
+                                    break  # 跳出内部循环，继续到生成报告的步骤
+                                
                                 yield 'data: ' + json.dumps({
                                     'step': 3,
                                     'message': f'第 {iteration + 1} 轮评估完成，质量评分: {observation.quality_score:.2f}',
