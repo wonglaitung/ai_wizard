@@ -355,7 +355,7 @@ def process_data(task_plan, file_content=None):
         else:
             df = list(multi_sheet_data.values())[0] if multi_sheet_data else pd.DataFrame()
         
-        # 对于特定工作表的操作，仍保留原有逻辑
+        # 对于特定工作表的操作，需要映射到实际的重命名列
         processed_operations = []
         for op in operations:
             op_column = op.get("column")
@@ -363,13 +363,22 @@ def process_data(task_plan, file_content=None):
                 # 分离工作表名和列名
                 parts = op_column.split(".", 1)
                 sheet_name, column_name = parts[0], parts[1]
-                if sheet_name in multi_sheet_data:
-                    # 为特定工作表创建操作
+                
+                # 查找实际的重命名列 - 尝试匹配 "列名_工作表名" 格式
+                actual_column = None
+                for col in df.columns:
+                    # 检查是否为 "列名_工作表名" 格式
+                    if col == f"{column_name}_{sheet_name}" or col.startswith(f"{column_name}_{sheet_name}"):
+                        actual_column = col
+                        break
+                
+                if actual_column:
+                    # 创建新操作，使用实际的列名
                     new_op = op.copy()  # 使用浅拷贝
-                    new_op["column"] = column_name
-                    new_op["_sheet"] = sheet_name  # 记录工作表名
+                    new_op["column"] = actual_column
                     processed_operations.append(new_op)
                 else:
+                    # 如果没找到匹配的列，保留原操作，让后续逻辑处理错误
                     processed_operations.append(op)
             else:
                 processed_operations.append(op)
@@ -379,10 +388,10 @@ def process_data(task_plan, file_content=None):
             try:
                 op_name = op.get("name")
                 column = op.get("column")
-                sheet_name = op.get("_sheet")  # 获取指定的工作表
+                sheet_name = op.get("_sheet")  # 获取指定的工作表（这个是在列映射前设置的）
                 
-                # 确定使用哪个数据框
-                current_df = multi_sheet_data.get(sheet_name, df) if sheet_name else df
+                # 使用合并后的数据框进行操作（所有数据都在一个DataFrame中）
+                current_df = df  # 使用合并后的df，而不是特定工作表的df
                 
                 # 尝试匹配列名（只对字符串类型的列名进行匹配）
                 actual_column = None
@@ -401,9 +410,20 @@ def process_data(task_plan, file_content=None):
                                 actual_column = col
                                 break
                 
+                # 特别处理 "SheetN.列名" 格式的列引用 - 如果上面没找到，尝试在合并数据中查找对应的重命名列
+                if not actual_column and column and isinstance(column, str) and "." in column:
+                    parts = column.split(".", 1)
+                    if len(parts) == 2:
+                        sheet_part, col_part = parts[0], parts[1]
+                        # 查找 "列名_工作表名" 格式的实际列
+                        for col in current_df.columns:
+                            if col == f"{col_part}_{sheet_part}" or col.startswith(f"{col_part}_{sheet_part}"):
+                                actual_column = col
+                                break
+                
                 if column and not actual_column and isinstance(column, str):
                     column_ref = f"{sheet_name}.{column}" if sheet_name else column
-                    results[f"{op_name}_{column_ref}"] = f"错误：列 '{column_ref}' 不存在"
+                    results[f"{op_name}_{column_ref}"] = f"错误：列 '{column_ref}' 不存在，可用的列: {list(current_df.columns)}"
                     continue
                     
                 # 使用注册的操作处理函数
@@ -412,26 +432,56 @@ def process_data(task_plan, file_content=None):
                     
                     # 检查是否需要复杂参数（如字典或列表）
                     if isinstance(column, (dict, list)) and op_name in ['group_by', 'pivot_table', 'cross_tab', 'aggregate']:
-                        # 对于需要复杂参数的操作，传递原始参数
-                        operation_result = operation_func(current_df, column)
+                        # 对于需要复杂参数的操作，需要映射列表中的列名
+                        if isinstance(column, list):
+                            # 尝试映射列表中的每个列名
+                            mapped_column = []
+                            for col_item in column:
+                                if isinstance(col_item, str) and "." in col_item:
+                                    # 分离工作表名和列名
+                                    parts = col_item.split(".", 1)
+                                    if len(parts) == 2:
+                                        sheet_part, col_part = parts[0], parts[1]
+                                        # 查找 "列名_工作表名" 格式的实际列
+                                        actual_col = None
+                                        for df_col in current_df.columns:
+                                            if df_col == f"{col_part}_{sheet_part}" or df_col.startswith(f"{col_part}_{sheet_part}"):
+                                                actual_col = df_col
+                                                break
+                                        if actual_col:
+                                            mapped_column.append(actual_col)
+                                        else:
+                                            # 如果找不到映射，保留原始值
+                                            mapped_column.append(col_item)
+                                else:
+                                    # 不是 SheetN.列名 格式，直接添加
+                                    mapped_column.append(col_item)
+                            operation_result = operation_func(current_df, mapped_column)
+                        elif isinstance(column, dict):
+                            # 对字典类型的参数进行适当处理
+                            operation_result = operation_func(current_df, column)
+                        else:
+                            operation_result = operation_func(current_df, column)
                     else:
                         # 对于普通操作，传递匹配到的列名
                         operation_result = operation_func(current_df, actual_column if actual_column else current_df.columns.tolist())
                     
                     # 根据操作结果更新results字典
-                    column_ref = f"{sheet_name}.{column}" if sheet_name and column else (column or "all")
+                    # 使用实际匹配到的列名作为引用，而不是原始引用格式
+                    column_ref = actual_column if actual_column and not isinstance(column, (dict, list)) else (f"{sheet_name}.{column}" if sheet_name and column else (column or "all"))
                     if actual_column and not isinstance(column, (dict, list)):
                         # 如果指定了具体列，则添加列名前缀
                         if isinstance(operation_result, dict):
-                            results[f"{column_ref}_"] = operation_result
+                            results[f"{actual_column}_"] = operation_result
                         else:
-                            results[f"{column_ref}_{op_name}"] = operation_result
+                            results[f"{actual_column}_{op_name}"] = operation_result
                     else:
                         # 如果没有指定列或使用了复杂参数，则使用操作名作为前缀
                         if isinstance(operation_result, dict):
                             results.update(operation_result)
                         else:
-                            # 如果返回单个值，使用操作名存储
+                            # 如果返回单个值，使用操作名或原始列引用存储
+                            column_ref = f"{sheet_name}.{column}" if sheet_name and column else (column or "all")
                             results[f"{op_name}_result"] = operation_result
                 else:
                     # 如果操作未注册，返回错误信息
