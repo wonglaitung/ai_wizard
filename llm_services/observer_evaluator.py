@@ -75,14 +75,17 @@ def evaluate_analysis_results(task_plan: Dict[str, Any],
     """
     
     # 准备模型参数 - 使用用户配置，但对评估场景进行微调
+    # 优先使用传入的api_key，然后是环境变量
+    effective_api_key = api_key or settings.get('apiKey') or os.getenv('QWEN_API_KEY', '') or os.getenv('DASHSCOPE_API_KEY', '')
+    
     model_params = {
         'model': settings.get('modelName', 'qwen-max'),
         'temperature': min(settings.get('temperature', 0.7), 0.3),  # 评估时使用较低温度确保一致性
         'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
         'top_p': settings.get('topP', 0.9),
         'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-        'api_key': api_key,
-        'base_url': settings.get('baseUrl', None),
+        'api_key': effective_api_key,
+        'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
     }
     
     try:

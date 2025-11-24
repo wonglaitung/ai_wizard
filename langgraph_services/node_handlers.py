@@ -27,6 +27,8 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         user_request = state["user_message"]
         file_content = state["file_content"]
         api_key = state["api_key"]
+        settings = state.get("settings", {})  # 获取设置参数
+        base_url = settings.get('baseUrl')  # 从设置中获取基础URL
 
         # 获取历史规划记录（转换为字典格式供增强规划器使用）
         plan_history = state.get("plan_history", [])
@@ -45,12 +47,17 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
                     plan_dict = plan.__dict__.copy()
                 plan_history_dicts.append(plan_dict)
 
+        # 从settings获取模型名称
+        model_name = settings.get('modelName')
+        
         logger.info(f"任务规划 - 用户请求: {user_request[:50]}..." if len(user_request) > 50 else f"任务规划 - 用户请求: {user_request}")
         logger.info(f"任务规划 - 文件内容长度: {len(file_content) if file_content else 0}")
+        logger.info(f"任务规划 - 基础URL: {base_url if base_url else '使用默认值'}")
+        logger.info(f"任务规划 - 模型名称: {model_name if model_name else '使用默认值'}")
         logger.info(f"任务规划 - 历史规划数量: {len(plan_history_dicts)}")
 
-        # 调用增强的任务规划函数，传入历史规划记录
-        task_plan_dict = plan_analysis_task(user_request, file_content, api_key, plan_history_dicts)
+        # 调用增强的任务规划函数，传入历史规划记录、基础URL和模型名称
+        task_plan_dict = plan_analysis_task(user_request, file_content, api_key, plan_history_dicts, base_url, model_name)
 
         # 将字典转换为TaskPlan对象
         task_plan = TaskPlan(
@@ -105,6 +112,8 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         file_content = state["file_content"]
         api_key = state["api_key"]
         observation = state.get("observation")
+        settings = state.get("settings", {})  # 获取设置参数
+        base_url = settings.get('baseUrl')  # 从设置中获取基础URL
 
         # 获取当前任务计划和观察结果
         current_task_plan = state.get("task_plan")
@@ -142,8 +151,13 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
                     plan_dict = plan.__dict__.copy()
                 plan_history_dicts.append(plan_dict)
 
+        # 从settings获取模型名称
+        model_name = settings.get('modelName')
+        
         logger.info(f"重规划 - 原始请求: {user_request[:50]}..." if len(user_request) > 50 else f"重规划 - 原始请求: {user_request}")
         logger.info(f"重规划 - 文件内容长度: {len(file_content) if file_content else 0}")
+        logger.info(f"重规划 - 基础URL: {base_url if base_url else '使用默认值'}")
+        logger.info(f"重规划 - 模型名称: {model_name if model_name else '使用默认值'}")
         logger.info(f"重规划 - 历史规划数量: {len(plan_history_dicts)}")
         if observation:
             logger.info(f"重规划 - 观察质量评分: {observation.quality_score}")
@@ -155,8 +169,8 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         # 构建增强的重规划请求
         enhanced_request = _build_enhanced_request(user_request, improvement_areas)
 
-        # 使用增强的规划器进行重规划，传入历史规划记录
-        task_plan_dict = plan_analysis_task(enhanced_request, file_content, api_key, plan_history_dicts)
+        # 使用增强的规划器进行重规划，传入历史规划记录、基础URL和模型名称
+        task_plan_dict = plan_analysis_task(enhanced_request, file_content, api_key, plan_history_dicts, base_url, model_name)
 
         # 将字典转换为TaskPlan对象
         task_plan = TaskPlan(
@@ -440,10 +454,15 @@ def generate_report_node(state: AnalysisState) -> AnalysisState:
         computation_results = state["computation_results"]
         api_key = state["api_key"]
         output_as_table = state["output_as_table"]
+        settings = state.get("settings", {})  # 获取设置参数
+        base_url = settings.get('baseUrl')  # 从设置中获取基础URL
+        model_name = settings.get('modelName')  # 从设置中获取模型名称
 
         logger.info(f"报告生成 - 任务类型: {task_plan.task_type if task_plan else 'N/A'}")
         logger.info(f"报告生成 - 计算结果项数: {len(computation_results) if computation_results else 0}")
         logger.info(f"报告生成 - 输出表格模式: {output_as_table}")
+        logger.info(f"报告生成 - 基础URL: {base_url if base_url else '使用默认值'}")
+        logger.info(f"报告生成 - 模型名称: {model_name if model_name else '使用默认值'}")
 
         # 将TaskPlan转换为字典格式
         task_plan_dict = {
@@ -453,8 +472,8 @@ def generate_report_node(state: AnalysisState) -> AnalysisState:
             "expected_output": task_plan.expected_output
         }
 
-        # 调用现有的报告生成函数
-        final_report = generate_report(task_plan_dict, computation_results, api_key, output_as_table)
+        # 调用现有的报告生成函数，传递base_url和model_name
+        final_report = generate_report(task_plan_dict, computation_results, api_key, output_as_table, base_url, model_name)
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()

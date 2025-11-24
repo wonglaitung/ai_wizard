@@ -6,20 +6,21 @@ import logging
 # 配置日志
 logger = logging.getLogger(__name__)
 
-# Configuration
+# Configuration - only for fallback when no base_url is provided in function calls
 api_key = os.getenv('QWEN_API_KEY', '')  # 从环境变量读取API密钥
-default_base_url = os.getenv('QWEN_BASE_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+default_base_url = 'https://dashscope.aliyuncs.com/compatible-mode/v1'  # 硬编码默认值作为最后的备选
 embedding_url = f"{default_base_url}/embeddings"
 chat_url = f"{default_base_url}/chat/completions"
 max_tokens = int(os.getenv('MAX_TOKENS', 16384))
 
-def embed_with_llm(query, base_url=None):
+def embed_with_llm(query, base_url=None, api_key=None):
     """
     Generate embeddings for a given query using Qwen's embedding API.
     
     Args:
         query (str): The text to generate embeddings for
         base_url (str): The base URL for the API. If None, uses default.
+        api_key (str): API key for authentication. If None, uses environment variable.
         
     Returns:
         dict: The embedding vector data
@@ -29,8 +30,11 @@ def embed_with_llm(query, base_url=None):
     """
     try:
         # 检查 API 密钥是否设置
+        if api_key is None:
+            api_key = os.getenv('QWEN_API_KEY', '')
+        
         if not api_key:
-            raise ValueError("QWEN_API_KEY 环境变量未设置")
+            raise ValueError("未提供API密钥")
         
         # 使用传入的base_url或默认URL
         if base_url is None:
@@ -175,12 +179,21 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
                             continue
         # 记录响应信息
         logger.info(f"[LLM RESPONSE] Model {model} response: {full_response[:200]}{'...' if len(full_response) > 200 else ''}")
+        
+        return full_response
     except requests.exceptions.HTTPError as http_err:
         logger.error(f'HTTP error during requests POST: {http_err}')
         logger.error(f'Response content: {http_err.response.text if http_err.response else "No response"}')
         raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
         logger.error(f'Error during requests POST: {error}')
+        # 检查是否是'choices'键缺失的错误
+        if "'choices'" in str(error):
+            logger.error("API响应格式错误：响应中缺少'choices'字段。这可能表示：")
+            logger.error("1. API密钥无效")
+            logger.error("2. 模型名称不正确")
+            logger.error("3. API端点URL不正确")
+            logger.error("4. 其他API错误")
         raise error  # Re-raise the error for the caller to handle
 
 def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
@@ -271,7 +284,19 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         response = requests.post(api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an exception for bad status codes
         
-        result = response.json()['choices'][0]['message']['content']  # Return the response text
+        response_json = response.json()
+        
+        # 检查响应是否包含预期的结构
+        if 'choices' not in response_json or not response_json['choices']:
+            logger.error(f'API响应缺少choices字段: {response_json}')
+            raise Exception(f'API响应格式错误: {response_json}')
+        
+        choice = response_json['choices'][0]
+        if 'message' not in choice or 'content' not in choice['message']:
+            logger.error(f'API响应缺少message内容: {response_json}')
+            raise Exception(f'API响应格式错误: {response_json}')
+        
+        result = choice['message']['content']  # Return the response text
         
         # 记录响应信息
         logger.info(f"[LLM RESPONSE] Model {model} response: {result[:200]}{'...' if len(result) > 200 else ''}")
@@ -283,4 +308,11 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         raise Exception(f"HTTP Error: {http_err.response.status_code} - {http_err.response.text if http_err.response else str(http_err)}")
     except Exception as error:
         logger.error(f'Error during requests POST: {error}')
+        # 检查是否是'choices'键缺失的错误
+        if "'choices'" in str(error):
+            logger.error("API响应格式错误：响应中缺少'choices'字段。这可能表示：")
+            logger.error("1. API密钥无效")
+            logger.error("2. 模型名称不正确")
+            logger.error("3. API端点URL不正确")
+            logger.error("4. 其他API错误")
         raise error  # Re-raise the error for the caller to handle

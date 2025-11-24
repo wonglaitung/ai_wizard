@@ -49,7 +49,7 @@ class EnhancedAnalysisPlanner:
         self.supported_operations = list(OPERATION_REGISTRY.keys())
     
     def plan_analysis_task(self, user_request: str, file_content: str = None, api_key: str = None, 
-                          plan_history: List[Dict] = None) -> Dict[str, Any]:
+                          plan_history: List[Dict] = None, base_url: str = None, model_name: str = None) -> Dict[str, Any]:
         """
         使用大模型规划数据分析任务，包含缓存和智能规划逻辑
         
@@ -58,6 +58,7 @@ class EnhancedAnalysisPlanner:
             file_content: 上传的文件内容（可选）
             api_key: API密钥
             plan_history: 历史规划记录（用于学习和改进）
+            base_url: API基础URL
             
         Returns:
             dict: 包含分析任务的详细信息
@@ -71,7 +72,7 @@ class EnhancedAnalysisPlanner:
             return task_plan
         
         # 如果缓存未命中，执行规划
-        task_plan = self._generate_task_plan(user_request, file_content, api_key, plan_history)
+        task_plan = self._generate_task_plan(user_request, file_content, api_key, plan_history, base_url, model_name)
         
         # 将结果存入缓存
         self.cache_manager.set(user_request, file_content or '', 'analysis_plan', task_plan)
@@ -79,7 +80,7 @@ class EnhancedAnalysisPlanner:
         return task_plan
     
     def _generate_task_plan(self, user_request: str, file_content: str = None, api_key: str = None, 
-                           plan_history: List[Dict] = None) -> Dict[str, Any]:
+                           plan_history: List[Dict] = None, base_url: str = None, model_name: str = None) -> Dict[str, Any]:
         """
         生成分析任务计划的核心实现
         
@@ -88,6 +89,7 @@ class EnhancedAnalysisPlanner:
             file_content: 上传的文件内容
             api_key: API密钥
             plan_history: 历史规划记录
+            base_url: API基础URL
             
         Returns:
             dict: 分析任务计划
@@ -172,19 +174,47 @@ class EnhancedAnalysisPlanner:
 """
         
         try:
-            # 准备模型参数 - 使用默认值或从环境变量获取
+            # 准备模型参数 - 优先使用传入的api_key，然后是环境变量
+            effective_api_key = api_key or os.getenv('QWEN_API_KEY', '') or os.getenv('DASHSCOPE_API_KEY', '')
+            
+            # 使用传入的模型名称，如果未提供则使用环境变量中的默认值
+            effective_model = model_name or os.getenv('QWEN_MODEL_NAME', 'qwen-max')
+            
             model_params = {
-                'model': os.getenv('QWEN_MODEL_NAME', 'qwen-max'),
+                'model': effective_model,
                 'temperature': 0.3,  # 任务规划使用较低的温度以获得更稳定的结果
                 'max_tokens': int(os.getenv('QWEN_MAX_TOKENS', 8196)),
                 'top_p': float(os.getenv('QWEN_TOP_P', 0.9)),
                 'frequency_penalty': float(os.getenv('QWEN_FREQUENCY_PENALTY', 0.5)),
-                'api_key': api_key,
-                'base_url': os.getenv('QWEN_BASE_URL', None)
+                'api_key': effective_api_key,
+                'base_url': base_url  # 使用传入的基础URL参数
             }
             
             # 调用大模型获取任务规划
             response = chat_with_llm(prompt, **model_params)
+            
+            # 解析JSON响应
+            task_plan = json.loads(response)
+            
+            # 验证返回的计划是否包含必要的字段
+            required_fields = ["task_type", "columns", "operations", "expected_output", "rationale"]
+            for field in required_fields:
+                if field not in task_plan:
+                    logger.warning(f"规划中缺少字段: {field}")
+                    task_plan[field] = "" if field in ["task_type", "expected_output", "rationale"] else [] if field in ["columns"] else []
+            
+            return task_plan
+        except Exception as e:
+            logger.error(f"分析任务规划出错: {str(e)}")
+            # 如果解析失败，返回默认任务计划
+            return {
+                "task_type": "基础分析",
+                "columns": [],
+                "operations": [],
+                "expected_output": "执行基础数据分析",
+                "rationale": "由于规划出错，使用基础分析任务",
+                "error": str(e)
+            }
             
             # 解析JSON响应
             task_plan = json.loads(response)
@@ -243,7 +273,7 @@ enhanced_planner = EnhancedAnalysisPlanner()
 
 
 def plan_analysis_task(user_request: str, file_content: str = None, api_key: str = None, 
-                      plan_history: List[Dict] = None) -> Dict[str, Any]:
+                      plan_history: List[Dict] = None, base_url: str = None, model_name: str = None) -> Dict[str, Any]:
     """
     使用增强的分析规划器规划数据分析任务
     
@@ -252,8 +282,9 @@ def plan_analysis_task(user_request: str, file_content: str = None, api_key: str
         file_content: 上传的文件内容（可选）
         api_key: API密钥
         plan_history: 历史规划记录
+        base_url: API基础URL
         
     Returns:
         dict: 包含分析任务的详细信息
     """
-    return enhanced_planner.plan_analysis_task(user_request, file_content, api_key, plan_history)
+    return enhanced_planner.plan_analysis_task(user_request, file_content, api_key, plan_history, base_url, model_name)
