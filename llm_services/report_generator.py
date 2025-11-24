@@ -6,7 +6,7 @@
 
 from .qwen_engine import chat_with_llm
 
-def generate_report(task_plan, computation_results, api_key=None, output_as_table=False):
+def generate_report(task_plan, computation_results, api_key=None, output_as_table=False, base_url=None, model_name=None):
     """
     生成业务数据透视分析报告
     
@@ -15,6 +15,8 @@ def generate_report(task_plan, computation_results, api_key=None, output_as_tabl
         computation_results (dict): 计算结果
         api_key (str): API密钥
         output_as_table (bool): 是否以表格形式输出
+        base_url (str): API基础URL
+        model_name (str): 模型名称
         
     Returns:
         str: 生成的分析报告
@@ -56,15 +58,20 @@ def generate_report(task_plan, computation_results, api_key=None, output_as_tabl
 """
     
     try:
-        # 准备模型参数 - 使用默认值或从环境变量获取
+        # 准备模型参数 - 优先使用传入的api_key，然后是环境变量
+        effective_api_key = api_key or os.getenv('QWEN_API_KEY', '') or os.getenv('DASHSCOPE_API_KEY', '')
+        
+        # 使用传入的模型名称，如果未提供则使用环境变量中的默认值
+        effective_model = model_name or os.getenv('QWEN_MODEL_NAME', 'qwen-max')
+        
         model_params = {
-            'model': os.getenv('QWEN_MODEL_NAME', 'qwen-max'),
+            'model': effective_model,
             'temperature': 0.5,  # 报告生成使用中等温度以平衡创造性和一致性
             'max_tokens': int(os.getenv('QWEN_MAX_TOKENS', 8196)),
             'top_p': float(os.getenv('QWEN_TOP_P', 0.9)),
             'frequency_penalty': float(os.getenv('QWEN_FREQUENCY_PENALTY', 0.5)),
-            'api_key': api_key,
-            'base_url': os.getenv('QWEN_BASE_URL', None)
+            'api_key': effective_api_key,
+            'base_url': base_url or os.getenv('QWEN_BASE_URL', None)  # 优先使用传入的base_url
         }
         
         # 调用大模型生成报告
