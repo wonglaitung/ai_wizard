@@ -539,7 +539,7 @@ def chat_node(state: AnalysisState) -> AnalysisState:
             'content': user_message
         })
 
-        # 准备模型参数
+        # 准备模型参数，使用获取到的聊天历史
         model_params = {
             'model': settings.get('modelName', 'qwen-max'),
             'temperature': settings.get('temperature', 0.7),
@@ -548,7 +548,7 @@ def chat_node(state: AnalysisState) -> AnalysisState:
             'frequency_penalty': settings.get('frequencyPenalty', 0.5),
             'api_key': settings.get('apiKey') or state.get('api_key'),
             'base_url': settings.get('baseUrl', None),
-            'history': []  # 已经手动处理了历史记录
+            'history': chat_history  # 使用实际的聊天历史
         }
 
         # 调用模型获取回复
