@@ -139,7 +139,7 @@ def chat():
         
         # 压缩历史记录以避免超出token限制
         if compress_chat_history:
-            compressed_chat_history = compress_chat_history(chat_history, settings.get('maxTokens', 8196))
+            compressed_chat_history = compress_chat_history(chat_history, settings.get('maxTokens', 8196), 0.7, settings)
         else:
             compressed_chat_history = chat_history  # 如果函数不可用，使用原始历史记录
         
@@ -381,7 +381,7 @@ def run_chat_with_streaming(initial_state: AnalysisState):
             
             # 压缩历史记录以避免超出token限制
             if compress_chat_history:
-                compressed_chat_history = compress_chat_history(chat_history, settings.get('maxTokens', 8196))
+                compressed_chat_history = compress_chat_history(chat_history, settings.get('maxTokens', 8196), 0.7, settings)
             else:
                 compressed_chat_history = chat_history  # 如果函数不可用，使用原始历史记录
             
@@ -398,13 +398,12 @@ def run_chat_with_streaming(initial_state: AnalysisState):
             # 准备模型参数
             model_params = {
                 'model': settings.get('modelName', 'qwen-max'),
-                'temperature': settings.get('temperature', 0.7),
-                'max_tokens': settings.get('maxTokens', 8196),
+                'temperature': settings.get('temperature', 0.7),  # 聊天使用用户设置的温度
+                'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
                 'top_p': settings.get('topP', 0.9),
                 'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-                'api_key': settings.get('apiKey') or initial_state.get('api_key'),
-                'base_url': settings.get('baseUrl', None),
-                'history': compressed_chat_history  # 使用压缩后的历史记录
+                'api_key': settings.get('apiKey'),  # 只使用settings中的api_key参数
+                'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
             }
             
             app.logger.info(f'开始调用LLM流式API，表格输出模式: {output_as_table}')

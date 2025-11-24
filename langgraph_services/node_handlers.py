@@ -56,8 +56,8 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         logger.info(f"任务规划 - 模型名称: {model_name if model_name else '使用默认值'}")
         logger.info(f"任务规划 - 历史规划数量: {len(plan_history_dicts)}")
 
-        # 调用增强的任务规划函数，传入历史规划记录、基础URL和模型名称
-        task_plan_dict = plan_analysis_task(user_request, file_content, api_key, plan_history_dicts, base_url, model_name)
+        # 调用增强的任务规划函数，传入历史规划记录和settings
+        task_plan_dict = plan_analysis_task(user_request, file_content, api_key, plan_history_dicts, settings)
 
         # 将字典转换为TaskPlan对象
         task_plan = TaskPlan(
@@ -169,8 +169,8 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
         # 构建增强的重规划请求
         enhanced_request = _build_enhanced_request(user_request, improvement_areas)
 
-        # 使用增强的规划器进行重规划，传入历史规划记录、基础URL和模型名称
-        task_plan_dict = plan_analysis_task(enhanced_request, file_content, api_key, plan_history_dicts, base_url, model_name)
+        # 使用增强的规划器进行重规划，传入历史规划记录和settings
+        task_plan_dict = plan_analysis_task(enhanced_request, file_content, api_key, plan_history_dicts, settings)
 
         # 将字典转换为TaskPlan对象
         task_plan = TaskPlan(
@@ -472,8 +472,8 @@ def generate_report_node(state: AnalysisState) -> AnalysisState:
             "expected_output": task_plan.expected_output
         }
 
-        # 调用现有的报告生成函数，传递base_url和model_name
-        final_report = generate_report(task_plan_dict, computation_results, api_key, output_as_table, base_url, model_name)
+        # 调用现有的报告生成函数，传递settings参数
+        final_report = generate_report(task_plan_dict, computation_results, api_key, output_as_table, base_url, model_name, settings)
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
@@ -542,13 +542,12 @@ def chat_node(state: AnalysisState) -> AnalysisState:
         # 准备模型参数，使用获取到的聊天历史
         model_params = {
             'model': settings.get('modelName', 'qwen-max'),
-            'temperature': settings.get('temperature', 0.7),
-            'max_tokens': settings.get('maxTokens', 8196),
+            'temperature': settings.get('temperature', 0.7),  # 聊天使用用户设置的温度
+            'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
             'top_p': settings.get('topP', 0.9),
             'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-            'api_key': settings.get('apiKey') or state.get('api_key'),
-            'base_url': settings.get('baseUrl', None),
-            'history': chat_history  # 使用实际的聊天历史
+            'api_key': settings.get('apiKey'),  # 只使用settings中的api_key参数
+            'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
         }
 
         # 调用模型获取回复
