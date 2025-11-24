@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 api_key = os.getenv('QWEN_API_KEY', '')  # 从环境变量读取API密钥
-default_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+default_base_url = os.getenv('QWEN_BASE_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
 embedding_url = f"{default_base_url}/embeddings"
 chat_url = f"{default_base_url}/chat/completions"
 max_tokens = int(os.getenv('MAX_TOKENS', 16384))
