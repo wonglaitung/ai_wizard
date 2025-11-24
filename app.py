@@ -23,6 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
 try:
     from langgraph_services.analysis_graph import AnalysisState, ChatState, get_analysis_graph, get_chat_graph, get_conditional_graph
     from llm_services.qwen_engine import chat_with_llm_stream
+    from llm_services.chat_history_compressor import compress_chat_history
     # 获取图实例
     analysis_graph = get_analysis_graph()
     chat_graph = get_chat_graph()
@@ -33,6 +34,14 @@ except ImportError as e:
     chat_graph = None
     conditional_graph_executor = None
     chat_with_llm_stream = None
+    compress_chat_history = None
+    
+    # 定义一个默认的压缩函数，以防导入失败
+    def compress_chat_history(chat_history, max_tokens=8196, keep_recent_ratio=0.7):
+        """默认的压缩函数，简单返回原历史记录"""
+        print("警告：无法导入压缩函数，返回原始历史记录")
+        return chat_history if chat_history else []
+
 
 app = Flask(__name__)
 
@@ -128,11 +137,17 @@ def chat():
                 yield 'data: ' + json.dumps({'error': '消息内容不能为空。'}) + '\n\n'
             return Response(error_generator(), mimetype='text/event-stream')
         
+        # 压缩历史记录以避免超出token限制
+        if compress_chat_history:
+            compressed_chat_history = compress_chat_history(chat_history, settings.get('maxTokens', 8196))
+        else:
+            compressed_chat_history = chat_history  # 如果函数不可用，使用原始历史记录
+        
         # 准备初始状态
         initial_state: AnalysisState = {
             "user_message": user_message,
             "file_content": file_content,
-            "chat_history": chat_history,
+            "chat_history": compressed_chat_history,
             "settings": settings,
             "output_as_table": output_as_table,
             "task_plan": None,
@@ -364,6 +379,12 @@ def run_chat_with_streaming(initial_state: AnalysisState):
             settings = initial_state["settings"]
             output_as_table = initial_state["output_as_table"]  # 获取表格输出设置
             
+            # 压缩历史记录以避免超出token限制
+            if compress_chat_history:
+                compressed_chat_history = compress_chat_history(chat_history, settings.get('maxTokens', 8196))
+            else:
+                compressed_chat_history = chat_history  # 如果函数不可用，使用原始历史记录
+            
             # 如果需要表格输出，修改用户消息以包含相关指令
             original_user_message = user_message
             if output_as_table:
@@ -383,7 +404,7 @@ def run_chat_with_streaming(initial_state: AnalysisState):
                 'frequency_penalty': settings.get('frequencyPenalty', 0.5),
                 'api_key': settings.get('apiKey') or initial_state.get('api_key'),
                 'base_url': settings.get('baseUrl', None),
-                'history': chat_history  # 直接使用历史记录
+                'history': compressed_chat_history  # 使用压缩后的历史记录
             }
             
             app.logger.info(f'开始调用LLM流式API，表格输出模式: {output_as_table}')
