@@ -37,7 +37,7 @@ def estimate_token_count(text: str) -> int:
     return int(token_count)
 
 
-def compress_chat_history(chat_history: List[Dict[str, Any]], max_tokens: int = 8196, keep_recent_ratio: float = 0.7) -> List[Dict[str, Any]]:
+def compress_chat_history(chat_history: List[Dict[str, Any]], max_tokens: int = 8196, keep_recent_ratio: float = 0.7, settings: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """
     压缩聊天历史记录，确保不超过最大token限制
     
@@ -45,6 +45,7 @@ def compress_chat_history(chat_history: List[Dict[str, Any]], max_tokens: int = 
         chat_history (list): 聊天历史记录列表
         max_tokens (int): 最大token限制
         keep_recent_ratio (float): 保留最近对话的比例，默认0.7（保留70%最近的对话）
+        settings (dict): 模型设置参数
         
     Returns:
         list: 压缩后的聊天历史记录
@@ -110,15 +111,17 @@ def compress_chat_history(chat_history: List[Dict[str, Any]], max_tokens: int = 
 请提供一个简洁的对话摘要，不要超过200个字。
 """
                 
-                # 准备模型参数
+                # 准备模型参数 - 使用传入的settings参数
+                settings = settings or {}  # 使用传入的settings参数或空字典
+                
                 model_params = {
-                    'model': os.getenv('QWEN_MODEL_NAME', 'qwen-max'),
-                    'temperature': 0.3,
-                    'max_tokens': 500,
-                    'top_p': 0.9,
-                    'frequency_penalty': 0.5,
+                    'model': settings.get('modelName', 'qwen-max'),
+                    'temperature': settings.get('temperature', 0.3),  # 摘要生成使用较低的温度以获得更稳定的结果
+                    'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
+                    'top_p': settings.get('topP', 0.9),
+                    'frequency_penalty': settings.get('frequencyPenalty', 0.5),
                     'api_key': api_key,
-                    'base_url': os.getenv('QWEN_BASE_URL', None)
+                    'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
                 }
                 
                 # 调用大模型生成摘要
