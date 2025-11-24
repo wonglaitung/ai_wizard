@@ -32,6 +32,7 @@
 │   └── node_handlers.py   # 节点处理器模块
 ├── llm_services/
 │   ├── cache_manager.py   # 缓存管理器模块
+│   ├── chat_history_compressor.py # 聊天历史压缩器模块
 │   ├── data_processor.py  # 数据处理模块
 │   ├── enhanced_analysis_planner.py # 增强数据分析任务规划器(含缓存和智能学习)
 │   ├── observer_evaluator.py # 观察与评估器模块
@@ -80,6 +81,7 @@
 33. **国际化支持**：支持中文和英文格式的多工作表数据解析。
 34. **管道符分隔数据处理**：使用管道符分隔数据以避免空格相关问题，提高数据处理准确性。
 35. **SheetN.列名格式支持**：支持使用 "Sheet1.列名" 格式访问特定工作表的列，系统会自动映射到实际的重命名列。
+36. **聊天历史压缩功能**：当历史记录过长时，使用大模型智能压缩历史记录，保留上下文关键信息。
 
 ## 技术栈
 
@@ -215,6 +217,7 @@ Flask 应用的主文件，负责：
 - 优化动态规划流程，实现基于质量评分的提前终止机制
 - 实现条件路由逻辑，根据用户消息和文件内容判断使用分步分析还是普通聊天流程
 - 支持中英文格式的多工作表标识（"工作表: " 和 "Sheet: "）
+- 与聊天历史压缩器集成，传递settings参数
 
 ### `langgraph_services/analysis_graph.py`
 
@@ -255,6 +258,8 @@ LangGraph状态定义和节点实现模块，负责：
 - 实现 `_analyze_improvement_areas` 函数，分析需要改进的领域
 - 实现 `_build_enhanced_request` 函数，构建增强的重规划请求
 - 包含改进的重规划节点逻辑，减少不必要的重规划周期
+- 与增强分析规划器集成，传递settings参数
+- 与报告生成器集成，传递settings参数
 
 ### `llm_services/enhanced_analysis_planner.py`
 
@@ -274,6 +279,7 @@ LangGraph状态定义和节点实现模块，负责：
 - 使用操作注册表检查支持的操作
 - 包含业务视角的分析建议
 - 提供通用示例，避免硬编码特定业务术语
+- 接收和使用settings参数，统一管理模型配置
 
 ### `llm_services/observer_evaluator.py`
 
@@ -290,6 +296,7 @@ LangGraph状态定义和节点实现模块，负责：
 - 实现 `Observation` Pydantic模型定义评估结果格式
 - 实现 `evaluate_analysis_results` 函数进行结果评估
 - 实现 `should_replan_analysis` 函数决定是否需要重新规划
+- 使用settings参数统一管理模型配置
 
 ### `llm_services/cache_manager.py`
 
@@ -305,6 +312,16 @@ LangGraph状态定义和节点实现模块，负责：
 - 支持可配置的缓存参数
 - 实现 `CacheManager` 类管理缓存逻辑
 - 提供 `get_cache_manager` 工厂函数获取缓存实例
+
+### `llm_services/chat_history_compressor.py`
+
+聊天历史压缩器模块，负责：
+
+- 估算文本的token数量
+- 压缩聊天历史记录，确保不超过最大token限制
+- 包含智能摘要功能，在简单截断无法满足限制时调用大模型进行摘要
+- 使用settings参数统一管理模型配置
+- 当历史记录过长时，使用大模型智能压缩历史记录，保留上下文关键信息
 
 ### `llm_services/data_processor.py`
 
@@ -362,6 +379,7 @@ Qwen 模型的接口文件，包含：
 - 从业务角度提供数据洞察和行动建议
 - 根据 `output_as_table` 参数决定输出格式
 - 生成专业的业务数据透视分析报告
+- 接收和使用settings参数，统一管理模型配置
 
 ### `main.html`
 
@@ -656,3 +674,5 @@ Python依赖列表，包含：
 - 使用管道符分隔数据以提高处理准确性
 - 支持中英文格式的多工作表标识，增强国际化能力
 - 实现 SheetN.列名 格式的智能映射，提升多工作表数据处理能力
+- 统一使用settings参数管理模型配置，包括model, temperature, max_tokens, top_p, frequency_penalty, api_key, base_url
+- 实现聊天历史压缩功能，优化长时间对话的token使用
