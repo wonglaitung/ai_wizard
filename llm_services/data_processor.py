@@ -56,7 +56,7 @@ def parse_multi_sheet_data(text_data):
                         # 如果没有管道符，尝试使用空格分隔
                         df = pd.read_csv(StringIO(df_str), sep='\s+', engine='python')
                     parsed_dataframes[current_sheet_name] = df
-                except:
+                except Exception as e:
                     # 如果解析失败，尝试其他方法
                     try:
                         # 再次检查是否包含管道符
@@ -66,8 +66,8 @@ def parse_multi_sheet_data(text_data):
                         else:
                             df = pd.read_csv(StringIO(df_str))
                         parsed_dataframes[current_sheet_name] = df
-                    except:
-                        logger.error(f"无法解析工作表 {current_sheet_name} 的数据")
+                    except Exception as e2:
+                        logger.error(f"无法解析工作表 {current_sheet_name} 的数据: {e}, {e2}")
                         
             # 开始新工作表 - handle both Chinese and English formats
             if line.startswith('工作表: '):
@@ -327,7 +327,10 @@ def process_data(task_plan, file_content=None):
                             # Check if columns are semantically similar
                             if (col == other_col or 
                                 col.replace(" ", "").replace("_", "").lower() == other_col.replace(" ", "").replace("_", "").lower() or 
-                                col in other_col or other_col in col):
+                                col in other_col or other_col in col or
+                                # 新增：检查是否是相同语义但不同时间点的列（通用处理，不限定特定月份）
+                                (col.replace("月", "").replace("末", "").replace("初", "").replace("上", "").replace("下", "") == 
+                                 other_col.replace("月", "").replace("末", "").replace("初", "").replace("上", "").replace("下", ""))):
                                 duplicate_found = True
                                 break
                         if duplicate_found:
@@ -407,6 +410,18 @@ def process_data(task_plan, file_content=None):
                     if not actual_column:
                         for col in current_df.columns:
                             if stripped_column in col or col in stripped_column:
+                                actual_column = col
+                                break
+                    
+                    # 如果还是没找到，尝试更智能的匹配逻辑，特别是处理工作表特定的列名
+                    if not actual_column:
+                        # 检查是否是类似"1月末客户编码清单"但实际在数据中是"1月末客户编码清单_Sheet2"的列
+                        for col in current_df.columns:
+                            # 检查列名是否包含原始列名，或原始列名是否包含在列名中
+                            if (stripped_column in col or col in stripped_column or
+                                # 特殊处理：检查是否是相同语义但带工作表后缀的列
+                                col.startswith(f"{stripped_column}_") or 
+                                col.endswith(f"_{stripped_column}")):
                                 actual_column = col
                                 break
                 
@@ -1360,20 +1375,20 @@ def cross_tab_operation(df, columns):
                 for df_col in df.columns:
                     df_col_lower = df_col.lower()
                     col_lower = col.lower()
-                    # 通用列匹配逻辑 - instead of hardcoded business terms, use common data patterns
+                    # 通用列匹配逻辑 - 基于通用数据类型模式，而非硬编码业务术语
                     # Check if columns have similar semantic meaning using general patterns
                     if (col_lower == df_col_lower or 
                         col_lower in df_col_lower or 
                         df_col_lower in col_lower or
-                        # General matching for common data types
-                        (any(keyword in col_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"]) and 
-                         any(keyword in df_col_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"])) or
-                        (any(keyword in col_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"]) and 
-                         any(keyword in df_col_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"])) or
-                        (any(keyword in col_lower for keyword in ["date", "time", "日期", "时间", "period", "期间"]) and 
-                         any(keyword in df_col_lower for keyword in ["date", "time", "日期", "时间", "period", "期间"])) or
-                        (any(keyword in col_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"]) and 
-                         any(keyword in df_col_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"]))):
+                        # 通用匹配：检查是否包含常见的标识符、分组、时间或数值关键词
+                        (any(keyword in col_lower for keyword in ["id", "code", "name", "标识", "编码", "名称"]) and 
+                         any(keyword in df_col_lower for keyword in ["id", "code", "name", "标识", "编码", "名称"])) or
+                        (any(keyword in col_lower for keyword in ["group", "team", "category", "type", "组", "类别", "类型", "部门"]) and 
+                         any(keyword in df_col_lower for keyword in ["group", "team", "category", "type", "组", "类别", "类型", "部门"])) or
+                        (any(keyword in col_lower for keyword in ["date", "time", "period", "日期", "时间", "期间"]) and 
+                         any(keyword in df_col_lower for keyword in ["date", "time", "period", "日期", "时间", "期间"])) or
+                        (any(keyword in col_lower for keyword in ["amount", "value", "count", "数量", "值", "sum", "total", "金额"]) and 
+                         any(keyword in df_col_lower for keyword in ["amount", "value", "count", "数量", "值", "sum", "total", "金额"]))):
                         existing_cols.append(df_col)
                         found = True
                         break
@@ -1392,12 +1407,12 @@ def cross_tab_operation(df, columns):
                     missing_lower = missing_col.lower()
                     
                     # 通用匹配逻辑 without hardcoded business terms
-                    if (any(keyword in missing_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"]) and 
-                        any(keyword in available_lower for keyword in ["id", "code", "编号", "编码", "name", "名称"])) or \
-                       (any(keyword in missing_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"]) and 
-                        any(keyword in available_lower for keyword in ["team", "group", "team", "组", "部门", "category", "type", "类别", "类型"])) or \
-                       (any(keyword in missing_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"]) and 
-                        any(keyword in available_lower for keyword in ["amount", "value", "count", "数量", "金额", "值", "sales", "sale", "销售"])):
+                    if (any(keyword in missing_lower for keyword in ["id", "code", "name", "标识", "编码", "名称"]) and 
+                        any(keyword in available_lower for keyword in ["id", "code", "name", "标识", "编码", "名称"])) or \
+                       (any(keyword in missing_lower for keyword in ["group", "team", "category", "type", "组", "类别", "类型", "部门"]) and 
+                        any(keyword in available_lower for keyword in ["group", "team", "category", "type", "组", "类别", "类型", "部门"])) or \
+                       (any(keyword in missing_lower for keyword in ["amount", "value", "count", "数量", "值", "sum", "total", "金额"]) and 
+                        any(keyword in available_lower for keyword in ["amount", "value", "count", "数量", "值", "sum", "total", "金额"])):
                         # 检查是否避免重复添加
                         if available_col not in existing_cols:
                             existing_cols.append(available_col)
