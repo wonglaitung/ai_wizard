@@ -6,7 +6,6 @@
 import json
 from typing import Dict, Any, List, Optional
 from .qwen_engine import chat_with_llm
-from .data_processor import OPERATION_REGISTRY
 from .cache_manager import get_cache_manager
 import logging
 import os
@@ -46,7 +45,8 @@ class EnhancedAnalysisPlanner:
             "pivot_table": "创建透视表，按行和列进行交叉汇总，用于多维度汇总分析",
             "aggregate": "执行复杂的聚合操作，可对指定列应用多种统计函数"
         }
-        self.supported_operations = list(OPERATION_REGISTRY.keys())
+        # 现在支持的操作列表是硬编码的，因为数据处理器完全依赖大模型生成代码
+        self.supported_operations = list(self.operation_descriptions.keys())
     
     def plan_analysis_task(self, user_request: str, file_content: str = None, api_key: str = None,
                           plan_history: List[Dict] = None, settings: Dict[str, Any] = None) -> Dict[str, Any]:
