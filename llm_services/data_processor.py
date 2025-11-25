@@ -20,6 +20,27 @@ logger = logging.getLogger(__name__)
 class DynamicCodeExecutor:
     """动态代码执行器，用于安全执行大模型生成的代码"""
     
+    # 类级别的安全方法常量，用于消除重复定义
+    SAFE_PANDAS_METHODS = {
+        'sum', 'mean', 'max', 'min', 'count', 'std', 'var', 'median', 'mode',
+        'quantile', 'abs', 'round', 'dropna', 'fillna', 'unique', 'tolist',
+        'groupby', 'agg', 'merge', 'concat', 'append', 'sort_values', 'reset_index',
+        'pivot_table', 'crosstab', 'corr', 'cov', 'describe', 'head', 'tail',
+        'loc', 'iloc', 'assign', 'rename', 'replace', 'apply', 'map', 'any', 'all', 'empty', 'bool', 'item',
+        'isna', 'notna', 'fillna', 'ffill', 'bfill', 'interpolate', 'values', 'index', 'columns', 'dtypes',
+        'shape', 'size', 'nunique', 'value_counts', 'sample', 'drop_duplicates', 'duplicated', 'shift',
+        'rolling', 'expanding', 'ewm', 'std', 'sem', 'mad', 'mad', 'skew', 'kurt', 'cumsum', 'cummax',
+        'cummin', 'cumprod', 'diff', 'pct_change', 'add', 'sub', 'mul', 'div', 'mod', 'pow',
+        'get_group', 'size', 'first', 'last', 'nth', 'head', 'tail', 'cumcount', 'ngroup', 'groups',
+        'transform', 'filter', 'std', 'var', 'sem', 'count', 'nunique', 'idxmax', 'idxmin',
+        'fillna', 'dropna', 'ffill', 'bfill', 'interpolate', 'rank', 'quantile', 'corrwith',
+        'to_frame', 'to_list', 'to_dict', 'to_numpy', 'squeeze', 'copy', 'clip', 'round', 'swaplevel',
+        'isin', 'between', 'isna', 'notna', 'isnull', 'notnull', 'duplicated', 'drop_duplicates',
+        'value_counts', 'sample', 'nlargest', 'nsmallest', 'idxmax', 'idxmin', 'align',
+        'update', 'join', 'combine', 'combine_first', 'where', 'mask', 'query', 'eval', 'pipe',
+        'agg', 'aggregate', 'apply', 'transform'
+    }
+    
     def __init__(self):
         # 定义安全操作的白名单
         self.safe_ops = {
@@ -249,7 +270,13 @@ class DynamicCodeExecutor:
                 }
                 
                 # 执行代码
-                result = eval(compile(tree, '<generated>', 'eval'), safe_namespaces)
+                try:
+                    result = eval(compile(tree, '<generated>', 'eval'), safe_namespaces)
+                except ValueError as e:
+                    if 'The truth value of a DataFrame is ambiguous' in str(e):
+                        return {"error": "Boolean operation on DataFrame not allowed - use .any(), .all(), .empty(), etc. instead", "success": False}
+                    else:
+                        raise e
             
             return {"result": result, "success": True}
         except SyntaxError as se:
@@ -264,8 +291,34 @@ class DynamicCodeExecutor:
         """
         清理大模型生成的代码，移除注释和import语句，并处理已弃用的方法
         """
+        # 检查是否包含代码块标记，并提取纯代码
+        cleaned_code = code.strip()
+        
+        # 处理代码块标记
+        if '```python' in cleaned_code:
+            start_idx = cleaned_code.find('```python') + len('```python')
+            end_idx = cleaned_code.find('```', start_idx)
+            if end_idx == -1:
+                end_idx = len(cleaned_code)
+            cleaned_code = cleaned_code[start_idx:end_idx].strip()
+        elif '```' in cleaned_code:
+            # 找到第一个```之后的内容
+            parts = cleaned_code.split('```')
+            if len(parts) >= 2:
+                # 取第一个代码块的内容
+                try:
+                    cleaned_code = parts[1].strip()
+                    # 如果还有更多部分，确保只取到下一个```之前的内容
+                    if len(parts) > 2:
+                        next_backtick_idx = cleaned_code.find('```')
+                        if next_backtick_idx != -1:
+                            cleaned_code = cleaned_code[:next_backtick_idx].strip()
+                except:
+                    # 如果提取失败，使用原始清理逻辑
+                    pass
+        
         # 按行分割代码
-        lines = code.strip().split('\n')
+        lines = cleaned_code.split('\n')
         cleaned_lines = []
         
         for line in lines:
@@ -287,19 +340,30 @@ class DynamicCodeExecutor:
                 if not line.strip():
                     continue
             
-            # 将Series.append()方法调用转换为pd.concat()，因为append在新版本pandas中已被弃用
+            # 跳过包含中文字符的行（这些通常是解释性文本）
             import re
+            # 检查是否包含中文字符
+            if re.search(r'[一-鿿]', line):
+                continue
+            
+            # 处理赋值语句，提取右侧表达式
+            # 匹配如 "variable = expression" 的形式
+            assignment_match = re.match(r'^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*(.+)$', line.strip())
+            if assignment_match:
+                # 提取赋值语句右边的表达式
+                line = assignment_match.group(1).strip()
+            
+            # 将Series.append()方法调用转换为pd.concat()，因为append在新版本pandas中已被弃用
             # 处理各种情况，如 df.append(...)、df['col'].append(...)、df.method().append(...)、df['col'].dropna().append(...) 等
             # 使用更精确的正则表达式来匹配对象的append方法调用
             # 匹配任何可能的链式调用后跟.append()的部分
-            line = re.sub(r'([a-zA-Z0-9_][a-zA-Z0-9_\[\]\'"\\.\s\(\)]+)\.append\(\s*([^)]+?)\s*\)', r'pd.concat([\1, \2], ignore_index=True)', line)
+            line = re.sub(r'([a-zA-Z0-9_][a-zA-Z0-9_[\]"\\.\s\(\)]+)\.append\(\s*([^)]+?)\s*\)', r'pd.concat([\1, \2], ignore_index=True)', line)
             
             cleaned_lines.append(line)
         
         # 重新组合代码
         cleaned_code = '\n'.join(cleaned_lines)
-        return cleaned_code
-    
+        return cleaned_code.strip()    
     def _is_safe_ast(self, tree: ast.AST) -> bool:
         """
         检查AST是否包含安全的操作
@@ -318,7 +382,7 @@ class DynamicCodeExecutor:
                     # 或pandas函数调用，如 pd.crosstab, pd.concat等
                     if isinstance(node.func.value, ast.Name) and node.func.value.id == 'pd':
                         # 这是pd.开头的函数调用，检查是否为允许的pandas函数
-                        allowed_pd_funcs = {'crosstab', 'concat', 'merge', 'pivot_table', 'get_dummies', 'cut', 'qcut', 'melt', 'date_range', 'to_datetime', 'Series', 'DataFrame'}
+                        allowed_pd_funcs = {'crosstab', 'concat', 'merge', 'pivot_table', 'get_dummies', 'cut', 'qcut', 'melt', 'date_range', 'to_datetime', 'Series', 'DataFrame', 'read_csv', 'read_json', 'read_excel', 'read_sql', 'read_html', 'read_clipboard', 'read_table', 'read_parquet', 'read_feather', 'read_stata', 'read_sas', 'read_spss', 'read_pickle', 'read_orc', 'read_xml', 'read_fwf'}
                         if node.func.attr not in allowed_pd_funcs:
                             return False
                     # 递归检查属性值是否安全
@@ -357,7 +421,8 @@ class DynamicCodeExecutor:
                                            'Module', 'Expr', 'Assign', 'keyword', 'Starred', 'comprehension', 'ListComp',
                                            'GeneratorExp', 'SetComp', 'DictComp', 'IfExp', 'Lambda', 'arguments', 'arg',
                                            'Tuple', 'Ellipsis', 'Pass', 'Break', 'Continue', 'Add', 'Mult', 'Sub', 'Div',
-                                           'Mod', 'Pow', 'LShift', 'RShift', 'BitOr', 'BitXor', 'BitAnd', 'FloorDiv']:  # 扩展节点类型白名单
+                                           'Mod', 'Pow', 'LShift', 'RShift', 'BitOr', 'BitXor', 'BitAnd', 'FloorDiv',
+                                           'Gt', 'Lt', 'GtE', 'LtE', 'Eq', 'NotEq']:  # 扩展节点类型白名单
                 # 其他未明确允许的节点类型认为是不安全的
                 # Load, Store, Del 是访问上下文节点，是安全的
                 return False
@@ -371,26 +436,7 @@ class DynamicCodeExecutor:
             # 检查属性值（如 df['A'] 部分）和属性名（如 sum）
             attr_name = node.attr
             # 允许pandas和numpy的常用方法
-            allowed_attrs = {
-                'sum', 'mean', 'max', 'min', 'count', 'std', 'var', 'median', 'mode',
-                'quantile', 'abs', 'round', 'dropna', 'fillna', 'unique', 'tolist',
-                'groupby', 'agg', 'merge', 'concat', 'append', 'sort_values', 'reset_index',
-                'pivot_table', 'crosstab', 'corr', 'cov', 'describe', 'head', 'tail',
-                'loc', 'iloc', 'assign', 'rename', 'replace', 'apply', 'map', 'any', 'all', 'empty', 'bool', 'item',
-                'isna', 'notna', 'fillna', 'ffill', 'bfill', 'interpolate', 'values', 'index', 'columns', 'dtypes',
-                'shape', 'size', 'nunique', 'value_counts', 'sample', 'drop_duplicates', 'duplicated', 'shift',
-                'rolling', 'expanding', 'ewm', 'std', 'sem', 'mad', 'mad', 'skew', 'kurt', 'cumsum', 'cummax',
-                'cummin', 'cumprod', 'diff', 'pct_change', 'add', 'sub', 'mul', 'div', 'mod', 'pow',
-                'get_group', 'size', 'first', 'last', 'nth', 'head', 'tail', 'cumcount', 'ngroup', 'groups',
-                'transform', 'filter', 'std', 'var', 'sem', 'count', 'nunique', 'idxmax', 'idxmin',
-                'fillna', 'dropna', 'ffill', 'bfill', 'interpolate', 'rank', 'quantile', 'corrwith',
-                'to_frame', 'to_list', 'to_dict', 'to_numpy', 'squeeze', 'copy', 'clip', 'round', 'swaplevel',
-                'isin', 'between', 'isna', 'notna', 'isnull', 'notnull', 'duplicated', 'drop_duplicates',
-                'value_counts', 'sample', 'nlargest', 'nsmallest', 'idxmax', 'idxmin', 'align',
-                'update', 'join', 'combine', 'combine_first', 'where', 'mask', 'query', 'eval', 'pipe',
-                'agg', 'aggregate', 'apply', 'transform'
-            }
-            if attr_name not in allowed_attrs:
+            if attr_name not in self.SAFE_PANDAS_METHODS:
                 return False
             # 检查属性值（如 df['A'] 部分）
             return self._is_safe_attr_value(node.value)
@@ -405,13 +451,29 @@ class DynamicCodeExecutor:
             # 如 df
             return node.id in ['df', 'pd', 'np']
         elif isinstance(node, ast.Subscript):
-            # 如 df['A']
-            return isinstance(node.value, ast.Name) and node.value.id == 'df'
+            # 如 df['A'] 或 df.groupby('A')['B'] 
+            # 需要检查Subscript的value是否安全
+            return self._is_safe_attr_value(node.value)
         elif isinstance(node, ast.Attribute):
             # 如链式调用 df.groupby('A')
             return self._is_safe_attr_chain(node)
+        elif isinstance(node, ast.Call):
+            # 如 df.groupby('A') 或 df.groupby('A')['B'].sum()，需要检查调用是否安全
+            if isinstance(node.func, ast.Attribute):
+                # 检查方法调用，如 .groupby(), .sum(), .reset_index() 等
+                attr_name = node.func.attr
+                attr_value = node.func.value
+                
+                # 检查属性名称是否安全
+                if attr_name not in self.SAFE_PANDAS_METHODS:
+                    return False
+                
+                # 检查属性值是否安全
+                return self._is_safe_attr_value(attr_value)
+            elif isinstance(node.func, ast.Name):
+                # 检查函数调用，如 pd.crosstab()
+                return node.func.id in self.safe_funcs or node.func.id in ['pd', 'np']
         else:
-            # 其他类型如Call是不安全的，因为可能是 __import__('os').system()
             return False
 
 
