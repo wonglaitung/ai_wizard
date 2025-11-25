@@ -312,6 +312,8 @@ def process_data_node(state: AnalysisState) -> AnalysisState:
     try:
         task_plan = state["task_plan"]
         file_content = state["file_content"]
+        api_key = state["api_key"]
+        settings = state.get("settings", {})
 
         logger.info(f"数据处理 - 任务类型: {task_plan.task_type}")
         logger.info(f"数据处理 - 操作数量: {len(task_plan.operations) if task_plan.operations else 0}")
@@ -325,8 +327,8 @@ def process_data_node(state: AnalysisState) -> AnalysisState:
             "expected_output": task_plan.expected_output
         }
 
-        # 调用现有的数据处理函数
-        computation_results = process_data(task_plan_dict, file_content)
+        # 调用现有的数据处理函数，传递API密钥和设置
+        computation_results = process_data(task_plan_dict, file_content, api_key=api_key, settings=settings)
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
