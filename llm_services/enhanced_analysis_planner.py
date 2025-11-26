@@ -221,29 +221,6 @@ class EnhancedAnalysisPlanner:
                 "rationale": "由于规划出错，使用基础分析任务",
                 "error": str(e)
             }
-            
-            # 解析JSON响应
-            task_plan = json.loads(response)
-            
-            # 验证返回的计划是否包含必要的字段
-            required_fields = ["task_type", "columns", "operations", "expected_output", "rationale"]
-            for field in required_fields:
-                if field not in task_plan:
-                    logger.warning(f"规划中缺少字段: {field}")
-                    task_plan[field] = "" if field in ["task_type", "expected_output", "rationale"] else [] if field in ["columns"] else []
-            
-            return task_plan
-        except Exception as e:
-            logger.error(f"分析任务规划出错: {str(e)}")
-            # 如果解析失败，返回默认任务计划
-            return {
-                "task_type": "基础分析",
-                "columns": [],
-                "operations": [],
-                "expected_output": "执行基础数据分析",
-                "rationale": "由于规划出错，使用基础分析任务",
-                "error": str(e)
-            }
     
     def _format_learning_context(self, plan_history: List[Dict]) -> str:
         """
