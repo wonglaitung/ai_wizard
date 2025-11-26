@@ -362,6 +362,41 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
                             second_df['_period'] = second_sheet_name
                             current_df = pd.concat([first_df, second_df], ignore_index=True)
             
+            # 为了匹配操作中指定的列名，我们可能需要更新当前操作的列名映射
+            # 如果操作指定的列名包含工作表前缀，但当前DataFrame没有，则需要映射
+            op_column = op.get("column", [])
+            if isinstance(op_column, list):
+                # 检查操作中是否包含带前缀的列名
+                prefixed_columns = [col for col in op_column if '_' in col and col.split('_')[0] in ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', '工作表1', '工作表2', '工作表3', '工作表4', '工作表5']]
+                if prefixed_columns:
+                    # 创建列名映射：将带前缀的列名映射到当前DataFrame的实际列名
+                    # 例如：'Sheet1_汇款国家/地区' -> '汇款国家/地区'
+                    current_cols = list(current_df.columns)
+                    column_mapping = {}
+                    
+                    for prefixed_col in prefixed_columns:
+                        if '_' in prefixed_col:
+                            actual_col = '_'.join(prefixed_col.split('_')[1:])  # 移除第一个下划线前的部分
+                            # 在当前列中查找匹配项
+                            for curr_col in current_cols:
+                                if curr_col == actual_col or curr_col.endswith(actual_col):
+                                    column_mapping[prefixed_col] = curr_col
+                                    break
+                    
+                    # 更新操作中的列名以匹配当前DataFrame的实际列名
+                    if column_mapping:
+                        updated_op = op.copy()
+                        if 'column' in updated_op and isinstance(updated_op['column'], list):
+                            updated_columns = []
+                            for col in updated_op['column']:
+                                if col in column_mapping:
+                                    updated_columns.append(column_mapping[col])
+                                else:
+                                    # 如果找不到映射，尝试直接使用（可能已经是正确名称）
+                                    updated_columns.append(col)
+                            updated_op['column'] = updated_columns
+                        op = updated_op
+
             # 使用大模型生成代码来执行操作
             user_request = f"""
             你是一个pandas专家，基于以下任务计划和数据，生成对应的pandas代码：
