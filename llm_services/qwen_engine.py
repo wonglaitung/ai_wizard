@@ -155,9 +155,6 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
         response = requests.post(api_url, headers=headers, json=payload, stream=True)
         response.raise_for_status()  # Raise an exception for bad status codes
         
-        # 记录调用信息
-        logger.info(f"[LLM CALL] Calling model: {model} with query: {query}")
-        
         # 处理流式响应
         full_response = ""
         for line in response.iter_lines():
