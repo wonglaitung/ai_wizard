@@ -228,79 +228,66 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
     
     def generate():
         try:
-            # 初始化迭代计数
+            # 直接使用LangGraph的流API来获取中间结果，让LangGraph内部逻辑处理迭代和终止
+            current_analysis_graph = get_analysis_graph()
             current_state = initial_state.copy()
             
-            iteration = 0
-            max_iterations = current_state.get("max_iterations", 3)
-            quality_threshold = float(os.getenv('QUALITY_THRESHOLD', 0.85))  # 设置质量阈值
-            
-            while iteration < max_iterations:
-                app.logger.info(f'开始迭代 {iteration + 1}/{max_iterations}')
-                
-                # 发送当前迭代的开始消息
-                yield 'data: ' + json.dumps({'step': 1, 'message': f'第 {iteration + 1} 轮规划分析任务...'}) + '\n\n'
-                
-                # 使用LangGraph的流API来获取中间结果
-                step_results = {}
-                current_analysis_graph = get_analysis_graph()
-                for output in current_analysis_graph.stream(current_state):
-                    # 输出是一个字典，键是节点名称，值是该节点的输出状态
-                    for node_name, state in output.items():
-                        app.logger.info(f'节点 {node_name} 完成，状态: {state.get("current_step", "unknown")}')
-                        
-                        # 更新当前状态
-                        current_state = state
-                        
-                        # 根据节点类型发送适当的响应
-                        if node_name == "plan_analysis" or node_name == "replan_analysis":
-                            task_plan = state.get("task_plan")
-                            if task_plan:
-                                plan_type = "重新规划" if node_name == "replan_analysis" else "初始规划"
-                                yield 'data: ' + json.dumps({
-                                    'step': 1, 
-                                    'message': f'{plan_type}完成，迭代 {iteration + 1}',
-                                    'result': task_plan.model_dump() if hasattr(task_plan, 'model_dump') else (task_plan.dict() if hasattr(task_plan, 'dict') else task_plan)
-                                }) + '\n\n'
-                                yield 'data: ' + json.dumps({'step': 2, 'message': f'第 {iteration + 1} 轮处理数据...'}) + '\n\n'
-                        elif node_name == "process_data":
-                            computation_results = state.get("computation_results")
-                            if computation_results:
-                                # 使用数据处理器中的序列化函数来确保所有pandas对象都被转换为可序列化的格式
-                                safe_results = _convert_pandas_types(computation_results) if _convert_pandas_types else computation_results
-                                yield 'data: ' + json.dumps({
-                                    'step': 2, 
-                                    'message': f'第 {iteration + 1} 轮数据处理完成',
-                                    'result': safe_results
-                                }) + '\n\n'
-                                # 注意：在动态规划流程中，处理完数据后应该继续到观察评估节点，
-                                # 不需要在这里发送步骤3的消息，因为会在observe_and_evaluate节点处理
-                        elif node_name == "observe_and_evaluate":
-                            observation = state.get("observation")
-                            if observation:
-                                needs_replanning = state.get("needs_replanning", False)
-                                
-                                # 检查质量评分是否已满足要求，如果是则提前终止迭代
-                                if observation.quality_score >= quality_threshold:
-                                    app.logger.info(f'质量评分 {observation.quality_score} >= {quality_threshold}，满足要求，提前终止迭代')
-                                    yield 'data: ' + json.dumps({
-                                        'step': 3,
-                                        'message': f'质量评分 {observation.quality_score:.2f} 满足要求，提前终止迭代，准备生成报告',
-                                        'result': {
-                                            'quality_score': observation.quality_score,
-                                            'feedback': observation.feedback,
-                                            'success': observation.success,
-                                            'next_actions': observation.next_actions,
-                                            'needs_replanning': False
-                                        }
-                                    }) + '\n\n'
-                                    # 设置不需要重新规划，以便跳出迭代循环直接生成报告
-                                    current_state["needs_replanning"] = False
-                                    break  # 跳出内部循环，继续到生成报告的步骤
-                                
+            for output in current_analysis_graph.stream(current_state):
+                # 输出是一个字典，键是节点名称，值是该节点的输出状态
+                for node_name, state in output.items():
+                    app.logger.info(f'节点 {node_name} 完成，状态: {state.get("current_step", "unknown")}')
+                    
+                    # 更新当前状态
+                    current_state = state
+                    
+                    # 根据节点类型发送适当的响应
+                    if node_name == "plan_analysis" or node_name == "replan_analysis":
+                        task_plan = state.get("task_plan")
+                        if task_plan:
+                            plan_type = "重新规划" if node_name == "replan_analysis" else "初始规划"
+                            iteration = state.get("iteration_count", 0) + 1
+                            yield 'data: ' + json.dumps({
+                                'step': 1, 
+                                'message': f'{plan_type}完成，迭代 {iteration}',
+                                'result': task_plan.model_dump() if hasattr(task_plan, 'model_dump') else (task_plan.dict() if hasattr(task_plan, 'dict') else task_plan)
+                            }) + '\n\n'
+                            yield 'data: ' + json.dumps({'step': 2, 'message': f'第 {iteration} 轮处理数据...'}) + '\n\n'
+                    elif node_name == "process_data":
+                        computation_results = state.get("computation_results")
+                        if computation_results:
+                            # 使用数据处理器中的序列化函数来确保所有pandas对象都被转换为可序列化的格式
+                            safe_results = _convert_pandas_types(computation_results) if _convert_pandas_types else computation_results
+                            iteration = state.get("iteration_count", 0) + 1
+                            yield 'data: ' + json.dumps({
+                                'step': 2, 
+                                'message': f'第 {iteration} 轮数据处理完成',
+                                'result': safe_results
+                            }) + '\n\n'
+                    elif node_name == "observe_and_evaluate":
+                        observation = state.get("observation")
+                        if observation:
+                            needs_replanning = state.get("needs_replanning", False)
+                            iteration = state.get("iteration_count", 0) + 1
+                            
+                            yield 'data: ' + json.dumps({
+                                'step': 3,
+                                'message': f'第 {iteration} 轮评估完成，质量评分: {observation.quality_score:.2f}',
+                                'result': {
+                                    'quality_score': observation.quality_score,
+                                    'feedback': observation.feedback,
+                                    'success': observation.success,
+                                    'next_actions': observation.next_actions,
+                                    'needs_replanning': needs_replanning
+                                }
+                            }) + '\n\n'
+                            
+                            # 如果质量评分达到阈值且不需要重规划，则表示流程即将结束
+                            quality_threshold = float(os.getenv('QUALITY_THRESHOLD', 0.85))
+                            if observation.quality_score >= quality_threshold and not needs_replanning:
+                                app.logger.info(f'质量评分 {observation.quality_score} >= {quality_threshold}，满足要求，即将生成报告')
                                 yield 'data: ' + json.dumps({
                                     'step': 3,
-                                    'message': f'第 {iteration + 1} 轮评估完成，质量评分: {observation.quality_score:.2f}',
+                                    'message': f'质量评分 {observation.quality_score:.2f} 满足要求，提前终止迭代，准备生成报告',
                                     'result': {
                                         'quality_score': observation.quality_score,
                                         'feedback': observation.feedback,
@@ -309,46 +296,27 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
                                         'needs_replanning': needs_replanning
                                     }
                                 }) + '\n\n'
-                                
-                                if needs_replanning:
-                                    yield 'data: ' + json.dumps({
-                                        'step': 4,
-                                        'message': f'需要重新规划，开始第 {iteration + 2} 轮迭代...'
-                                    }) + '\n\n'
-                                    # 更新迭代计数
-                                    current_state["iteration_count"] = iteration + 1
-                                    iteration += 1  # 递增迭代计数以继续循环
-                                    break  # 跳出内部循环，开始新的迭代
-                                else:
-                                    # 如果不需要重新规划，继续到报告生成
-                                    app.logger.info(f'评估完成，不需要重新规划，准备生成报告')
-                        elif node_name == "generate_report":
-                            final_report = state.get("final_report")
-                            if final_report:
-                                # 确保报告内容中的特殊字符被正确转义
-                                if isinstance(final_report, str):
-                                    # 使用json.dumps处理字符串内容，确保正确转义
-                                    safe_report = json.dumps(final_report, ensure_ascii=False)
-                                    yield 'data: ' + json.dumps({
-                                        'step': 4,
-                                        'message': f'生成最终报告，迭代 {iteration + 1} 完成',
-                                        'result': json.loads(safe_report)
-                                    }) + '\n\n'
-                                else:
-                                    yield 'data: ' + json.dumps({
-                                        'step': 4,
-                                        'message': f'生成最终报告，迭代 {iteration + 1} 完成',
-                                        'result': final_report
-                                    }) + '\n\n'
-                
-                # 检查是否需要继续迭代
-                needs_replanning = current_state.get("needs_replanning", False)
-                if not needs_replanning or iteration >= max_iterations - 1:
-                    app.logger.info(f'动态规划流程完成，总共 {iteration + 1} 次迭代')
-                    break
-                
-                iteration += 1
-            
+                    elif node_name == "generate_report":
+                        final_report = state.get("final_report")
+                        if final_report:
+                            # 确保报告内容中的特殊字符被正确转义
+                            if isinstance(final_report, str):
+                                # 使用json.dumps处理字符串内容，确保正确转义
+                                safe_report = json.dumps(final_report, ensure_ascii=False)
+                                iteration = state.get("iteration_count", 0) + 1
+                                yield 'data: ' + json.dumps({
+                                    'step': 4,
+                                    'message': f'生成最终报告，迭代 {iteration} 完成',
+                                    'result': json.loads(safe_report)
+                                }) + '\n\n'
+                            else:
+                                iteration = state.get("iteration_count", 0) + 1
+                                yield 'data: ' + json.dumps({
+                                    'step': 4,
+                                    'message': f'生成最终报告，迭代 {iteration} 完成',
+                                    'result': final_report
+                                }) + '\n\n'
+        
             # 发送结束信号
             app.logger.info('LangGraph动态规划分析流程完成')
             yield 'data: [DONE]\n\n'
