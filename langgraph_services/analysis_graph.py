@@ -119,7 +119,7 @@ def should_continue_iteration(state: AnalysisState) -> str:
     决定是否继续迭代的条件函数
     """
     iteration_count = state.get("iteration_count", 0)
-    max_iterations = state.get("max_iterations", 3)
+    max_iterations = state.get("max_iterations", 5)
     needs_replanning = state.get("needs_replanning", False)
     observation = state.get("observation")
     
