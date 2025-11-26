@@ -24,6 +24,7 @@ try:
     from langgraph_services.analysis_graph import AnalysisState, ChatState, get_analysis_graph, get_chat_graph, get_conditional_graph
     from llm_services.qwen_engine import chat_with_llm_stream
     from llm_services.chat_history_compressor import compress_chat_history
+    from llm_services.data_processor import _convert_pandas_types
     # 获取图实例
     analysis_graph = get_analysis_graph()
     chat_graph = get_chat_graph()
@@ -35,6 +36,7 @@ except ImportError as e:
     conditional_graph_executor = None
     chat_with_llm_stream = None
     compress_chat_history = None
+    _convert_pandas_types = None
     
     # 定义一个默认的压缩函数，以防导入失败
     def compress_chat_history(chat_history, max_tokens=8196, keep_recent_ratio=0.7):
@@ -264,10 +266,12 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
                         elif node_name == "process_data":
                             computation_results = state.get("computation_results")
                             if computation_results:
+                                # 使用数据处理器中的序列化函数来确保所有pandas对象都被转换为可序列化的格式
+                                safe_results = _convert_pandas_types(computation_results) if _convert_pandas_types else computation_results
                                 yield 'data: ' + json.dumps({
                                     'step': 2, 
                                     'message': f'第 {iteration + 1} 轮数据处理完成',
-                                    'result': computation_results
+                                    'result': safe_results
                                 }) + '\n\n'
                                 # 注意：在动态规划流程中，处理完数据后应该继续到观察评估节点，
                                 # 不需要在这里发送步骤3的消息，因为会在observe_and_evaluate节点处理
