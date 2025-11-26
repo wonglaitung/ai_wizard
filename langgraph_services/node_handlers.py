@@ -542,15 +542,14 @@ def chat_node(state: AnalysisState) -> AnalysisState:
         })
 
         # 准备模型参数，使用获取到的聊天历史
-        model_params = {
-            'model': settings.get('modelName', 'qwen-max'),
-            'temperature': settings.get('temperature', 0.7),  # 聊天使用用户设置的温度
-            'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
-            'top_p': settings.get('topP', 0.9),
-            'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-            'api_key': settings.get('apiKey'),  # 只使用settings中的api_key参数
-            'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
-        }
+        from ..llm_services.qwen_engine import create_model_params
+        model_params = create_model_params(
+            settings=settings,
+            api_key=settings.get('apiKey'),  # 只使用settings中的api_key参数
+            default_model='qwen-max',
+            default_temperature=0.7,  # 聊天使用用户设置的温度
+            default_max_tokens=2048   # 使用用户配置的值，但确保足够大
+        )
 
         # 调用模型获取回复
         full_response = ""

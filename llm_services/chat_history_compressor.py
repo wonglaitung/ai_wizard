@@ -112,17 +112,17 @@ def compress_chat_history(chat_history: List[Dict[str, Any]], max_tokens: int = 
 """
                 
                 # 准备模型参数 - 使用传入的settings参数
+                from .qwen_engine import create_model_params
+                
                 settings = settings or {}  # 使用传入的settings参数或空字典
                 
-                model_params = {
-                    'model': settings.get('modelName', 'qwen-max'),
-                    'temperature': settings.get('temperature', 0.3),  # 摘要生成使用较低的温度以获得更稳定的结果
-                    'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
-                    'top_p': settings.get('topP', 0.9),
-                    'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-                    'api_key': api_key,
-                    'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
-                }
+                model_params = create_model_params(
+                    settings=settings,
+                    api_key=api_key,
+                    default_model='qwen-max',
+                    default_temperature=0.3,  # 摘要生成使用较低的温度以获得更稳定的结果
+                    default_max_tokens=2048   # 使用用户配置的值，但确保足够大
+                )
                 
                 # 调用大模型生成摘要
                 summary = chat_with_llm(summary_prompt, **model_params)

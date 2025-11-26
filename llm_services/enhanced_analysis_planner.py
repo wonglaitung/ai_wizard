@@ -112,20 +112,54 @@ class EnhancedAnalysisPlanner:
         if plan_history:
             learning_context = self._format_learning_context(plan_history)
         
+        # 解析文件内容以获取实际列名
+        actual_columns = []
+        if file_content:
+            # 尝试解析多工作表数据
+            if "工作表: " in file_content or "Sheet: " in file_content:
+                # 解析多工作表数据结构
+                from io import StringIO
+                lines = file_content.strip().split('\n')
+                current_sheet_name = None
+                for line in lines:
+                    if line.startswith('工作表: ') or line.startswith('Sheet: '):
+                        if line.startswith('工作表: '):
+                            current_sheet_name = line.split('工作表: ')[1].strip()
+                        elif line.startswith('Sheet: '):
+                            current_sheet_name = line.split('Sheet: ')[1].strip()
+                    elif current_sheet_name and '|' in line and not line.startswith('工作表: ') and not line.startswith('Sheet: '):
+                        # 这是数据行，获取列名（第一行通常是列名）
+                        columns = [f"{current_sheet_name}_{col.strip()}" for col in line.split('|') if col.strip()]
+                        actual_columns.extend(columns)
+                        break
+            else:
+                # 解析单工作表数据
+                try:
+                    import pandas as pd
+                    df = pd.read_csv(StringIO(file_content))
+                    actual_columns = df.columns.tolist()
+                except:
+                    # 如果解析失败，尝试手动解析
+                    if file_content:
+                        lines = file_content.strip().split('\n')
+                        for line in lines:
+                            if '|' in line and not line.startswith('工作表: ') and not line.startswith('Sheet: '):
+                                actual_columns = [col.strip() for col in line.split('|') if col.strip()]
+                                break
+        
         # 构建提示词，包含智能初始规划和历史学习
         prompt = f"""
 你是一个业务数据分析专家。你的任务是将用户的请求转换为具体的计算任务，帮助用户从业务角度透视数据。
 
 用户请求: {user_request}
 
-文件内容:
-{file_content if file_content else "无文件内容"}
+文件内容:\n{file_content if file_content else "无文件内容"}
 
-历史规划记录（用于学习和改进）:
-{learning_context if learning_context else "无历史规划记录"}
+可用列名: {actual_columns}
 
-系统支持以下操作（用于业务数据透视）:
-{operations_info}
+历史规划记录（用于学习和改进）:\n{learning_context if learning_context else "无历史规划记录"}
+
+系统支持以下操作（用于业务数据透视）:\n{operations_info}
 
 请按照以下格式输出JSON响应，包含以下字段：
 1. "task_type": 任务类型（如：业务指标分析、业务趋势分析、业务构成分析、业务关联分析、业务诊断等）
@@ -134,45 +168,30 @@ class EnhancedAnalysisPlanner:
 4. "expected_output": 预期的输出结果描述（从业务角度解释）
 5. "rationale": 规划的推理过程，解释为什么选择这些操作
 
-示例输出格式：
-{{
-    "task_type": "数据分析",
+示例输出格式：\n{{\n    "task_type": "数据分析",
     "columns": ["数值列1", "分类列1"],
-    "operations": [
-        {{"name": "sum", "column": "数值列1", "description": "计算指定列的总和"}},
-        {{"name": "mean", "column": "数值列1", "description": "计算指定列的平均值"}},
-        {{"name": "max", "column": "数值列1", "description": "找出指定列的最大值"}}
-    ],
+    "operations": [\n        {{"name": "sum", "column": "数值列1", "description": "计算指定列的总和"}},\n        {{"name": "mean", "column": "数值列1", "description": "计算指定列的平均值"}},\n        {{"name": "max", "column": "数值列1", "description": "找出指定列的最大值"}}\n    ],
     "expected_output": "输出指定列的总和、平均值和最大值",
     "rationale": "基于用户请求和数据特征，选择适当的统计操作"
 }}
 
-对于多维度交叉分析，请使用以下格式：
-{{
-    "task_type": "多维度交叉分析",
+对于多维度交叉分析，请使用以下格式：\n{{\n    "task_type": "多维度交叉分析",
     "columns": ["分类列1", "分类列2", "数值列1"],
-    "operations": [
-        {{"name": "group_by", "column": ["分类列1", "分类列2"], "description": "按指定的分类列进行分组统计"}},
-        {{"name": "pivot_table", "column": {{"index": "分类列1", "columns": "分类列2", "values": "数值列1", "aggfunc": "sum"}}, "description": "创建透视表进行多维度汇总分析"}},
-        {{"name": "cross_tab", "column": ["分类列1", "分类列2"], "description": "创建交叉表分析两个分类变量之间的关系"}}
-    ],
+    "operations": [\n        {{"name": "group_by", "column": ["分类列1", "分类列2"], "description": "按指定的分类列进行分组统计"}},\n        {{"name": "pivot_table", "column": {{"index": "分类列1", "columns": "分类列2", "values": "数值列1", "aggfunc": "sum"}}, "description": "创建透视表进行多维度汇总分析"}},\n        {{"name": "cross_tab", "column": ["分类列1", "分类列2"], "description": "创建交叉表分析两个分类变量之间的关系"}}\n    ],
     "expected_output": "输出多维度的分组统计结果",
     "rationale": "基于多维度分析需求，使用分组、透视表和交叉表来展示不同维度下的数据特征"
 }}
 
-对于多工作表数据的交叉分析，请使用以下格式：
-{{
-    "task_type": "多工作表数据分析",
+对于多工作表数据的交叉分析，请使用以下格式：\n{{\n    "task_type": "多工作表数据分析",
     "columns": ["工作表1数据列", "工作表2数据列", "分类列"],
-    "operations": [
-        {{"name": "group_by", "column": ["分类列"], "description": "按分类列分组进行统计"}},
-        {{"name": "cross_tab", "column": ["工作表1数据列", "工作表2数据列"], "description": "创建交叉表分析两个工作表间数据的关系"}},
-        {{"name": "count", "column": "工作表1数据列", "description": "计算工作表1的数据总数"}},
-        {{"name": "count", "column": "工作表2数据列", "description": "计算工作表2的数据总数"}}
-    ],
+    "operations": [\n        {{"name": "group_by", "column": ["分类列"], "description": "按分类列分组进行统计"}},\n        {{"name": "cross_tab", "column": ["工作表1数据列", "工作表2数据列"], "description": "创建交叉表分析两个工作表间数据的关系"}},\n        {{"name": "count", "column": "工作表1数据列", "description": "计算工作表1的数据总数"}},\n        {{"name": "count", "column": "工作表2数据列", "description": "计算工作表2的数据总数"}}\n    ],
     "expected_output": "输出各工作表数据的对比分析结果",
     "rationale": "基于多工作表对比分析需求，使用分组统计和交叉表来展示不同工作表间的数据关系"
 }}
+
+重要提示：
+- 如果需要计算数量变化等衍生指标，需要先执行基础操作再进行计算
+- 避免使用不存在的列名
 
 请严格按照上述JSON格式输出，不要包含其他内容。
 """
@@ -186,15 +205,14 @@ class EnhancedAnalysisPlanner:
             if base_url:
                 settings['baseUrl'] = base_url
             
-            model_params = {
-                'model': settings.get('modelName', 'qwen-max'),
-                'temperature': settings.get('temperature', 0.3),  # 任务规划使用较低的温度以获得更稳定的结果
-                'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
-                'top_p': settings.get('topP', 0.9),
-                'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-                'api_key': api_key,  # 只使用传入的api_key参数
-                'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
-            }
+            from .qwen_engine import create_model_params
+            model_params = create_model_params(
+                settings=settings,
+                api_key=api_key,
+                default_model='qwen-max',
+                default_temperature=0.3,  # 任务规划使用较低的温度以获得更稳定的结果
+                default_max_tokens=2048   # 使用用户配置的值，但确保足够大
+            )
             
             # 调用大模型获取任务规划
             response = chat_with_llm(prompt, **model_params)
