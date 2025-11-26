@@ -163,11 +163,8 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
             logger.info(f"重规划 - 观察质量评分: {observation.quality_score}")
             logger.info(f"重规划 - 观察反馈: {observation.feedback[:50] if observation.feedback else 'N/A'}...")
 
-        # 分析观察结果，确定需要改进的方面
-        improvement_areas = _analyze_improvement_areas(observation, computation_results)
-
-        # 构建增强的重规划请求
-        enhanced_request = _build_enhanced_request(user_request, improvement_areas)
+        # 构建详细的重规划请求，包含具体的评估反馈
+        enhanced_request = build_detailed_replan_request(user_request, observation, computation_results)
 
         # 使用增强的规划器进行重规划，传入历史规划记录和settings
         task_plan_dict = plan_analysis_task(enhanced_request, file_content, api_key, plan_history_dicts, settings)
@@ -297,6 +294,53 @@ def _build_enhanced_request(original_request: str, improvement_areas: Dict[str, 
     enhanced_parts.append("\n\n请基于之前的分析结果进行改进，避免重复之前的错误。")
 
     return "\n".join(enhanced_parts)
+
+
+def build_detailed_replan_request(original_request: str, observation, computation_results) -> str:
+    """
+    构建详细的重规划请求，包含具体的评估反馈和缺失信息
+
+    Args:
+        original_request: 原始请求
+        observation: 观察结果
+        computation_results: 计算结果
+
+    Returns:
+        str: 详细的重规划请求
+    """
+    request_parts = [original_request]
+    
+    if observation:
+        request_parts.append("\n\n## 评估反馈")
+        request_parts.append(f"分析质量评分: {observation.quality_score}")
+        request_parts.append(f"反馈: {observation.feedback}")
+        
+        # 分析反馈中的具体问题
+        if observation.feedback:
+            feedback = observation.feedback.lower()
+            if "缺失" in feedback or "缺少" in feedback:
+                request_parts.append("\n## 重要提示")
+                request_parts.append("- 请注意：上次分析缺失了关键指标，请确保本次分析包含所有要求的指标")
+    
+    # 根据计算结果分析缺失的项
+    if computation_results and isinstance(computation_results, dict):
+        # 检查是否存在 None 结果，这些通常表示操作失败
+        for key, value in computation_results.items():
+            if key.endswith('_result') and (value is None or 
+                (isinstance(value, str) and ('错误' in value or 'error' in value.lower()))):
+                # 从键名推断操作类型
+                op_name = key.replace('_result', '').replace('_error', '')
+                if op_name:  # 确保op_name不为空
+                    op_display_name = op_name.replace('_', ' ').title()
+                    request_parts.append(f"- 请注意：{op_display_name} 操作执行失败，请检查并修正相关计算")
+    
+    request_parts.append("\n## 重新规划要求")
+    request_parts.append("- 请基于上述反馈进行改进")
+    request_parts.append("- 确保包含所有需要的分析维度和指标")
+    request_parts.append("- 避免重复之前的错误")
+    
+    return "\n".join(request_parts)
+
 
 
 def process_data_node(state: AnalysisState) -> AnalysisState:
