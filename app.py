@@ -160,7 +160,7 @@ def chat():
             "api_key": settings.get('apiKey') or os.getenv('QWEN_API_KEY'),
             "processed": False,
             "iteration_count": 0,
-            "max_iterations": 3,  # 设置最大迭代次数
+            "max_iterations": 5,  # 设置最大迭代次数
             "observation": None,
             "needs_replanning": False,
             "plan_history": []
@@ -368,15 +368,14 @@ def run_chat_with_streaming(initial_state: AnalysisState):
                 user_message = f"请分析以下文件内容：\n\n{file_content}\n\n{user_message}"
             
             # 准备模型参数
-            model_params = {
-                'model': settings.get('modelName', 'qwen-max'),
-                'temperature': settings.get('temperature', 0.7),  # 聊天使用用户设置的温度
-                'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
-                'top_p': settings.get('topP', 0.9),
-                'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-                'api_key': settings.get('apiKey'),  # 只使用settings中的api_key参数
-                'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
-            }
+            from llm_services.qwen_engine import create_model_params
+            model_params = create_model_params(
+                settings=settings,
+                api_key=settings.get('apiKey'),  # 只使用settings中的api_key参数
+                default_model='qwen-max',
+                default_temperature=0.7,  # 聊天使用用户设置的温度
+                default_max_tokens=2048   # 使用用户配置的值，但确保足够大
+            )
             
             app.logger.info(f'开始调用LLM流式API，表格输出模式: {output_as_table}')
             

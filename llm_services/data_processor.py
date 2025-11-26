@@ -49,8 +49,94 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
         return {"result": result, "success": True}
             
     except Exception as e:
+        # 检查是否是关于tuple的错误 - 包括多种可能的错误信息
+        error_message = str(e)
+        if ("Cannot subset columns with a tuple with more than one element" in error_message or 
+            "Use a list instead" in error_message or
+            "tuple indices must be integers or slices" in error_message or
+            # 也处理直接的KeyError错误，这在某些pandas版本中出现
+            (isinstance(e, KeyError) and isinstance(e.args[0], tuple) and len(e.args[0]) > 1)):
+            try:
+                # 尝试修复代码中的元组问题
+                fixed_code = _fix_dataframe_column_access(cleaned_code)
+                
+                # 重新执行修复后的代码
+                execution_env = {
+                    'pd': pd,
+                    'np': np,
+                    'df': df
+                }
+                
+                if '=' in fixed_code.strip():
+                    exec(fixed_code.strip(), execution_env)
+                    lines = fixed_code.strip().split('\n')
+                    last_line = lines[-1].strip()
+                    if '=' in last_line:
+                        var_name = last_line.split('=')[0].strip()
+                        result = execution_env.get(var_name)
+                    else:
+                        result = execution_env.get('result')
+                else:
+                    result = eval(fixed_code.strip(), execution_env)
+                
+                logger.info(f"成功修复并执行了包含列选择问题的代码")
+                return {"result": result, "success": True}
+            except Exception as fix_error:
+                logger.error(f"修复后的代码执行仍然失败: {str(fix_error)}")
+                return {"error": str(fix_error), "success": False}
+        
         logger.error(f"执行生成的代码时出错: {str(e)}")
         return {"error": str(e), "success": False}
+
+
+def _fix_dataframe_column_access(code: str) -> str:
+    """
+    修复pandas DataFrame中元组用于多列选择的问题
+    将代码中类似 df[(col1, col2)] 或 .groupby((col1, col2)) 的用法改为 df[[col1, col2]] 或 .groupby([col1, col2])
+    """
+    import re
+    
+    # 修复 df[(col1, col2)] 这种模式 -> df[[col1, col2]]
+    fixed_code = re.sub(
+        r'df\s*\[\s*\(\s*([^)]+?)\s*\)\s*\]', 
+        r'df[[\1]]', 
+        code
+    )
+    
+    # 修复 .groupby((列名, 列名)) 这种模式 -> .groupby([列名, 列名])
+    # 正确分析: (\.[a-z]+\s*\(\s*) \s* \( ([^)]+?) \) \s* \)
+    # 第1组: (.groupby\s*\(\s*) - 包含".groupby("的整个部分 
+    # 第2组: ([^)]+?) - 括号内的内容
+    # 第3组: (\s*\)) - 后面的空格和")"
+    fixed_code = re.sub(
+        r'(\.groupby\s*\(\s*)\(\s*([^)]+?)\s*\)(\s*\))',
+        r'\1[\2]\3',  # 使用 \3 而不是 \4
+        fixed_code
+    )
+    
+    # 修复 .agg((函数, 函数)) 这种模式 -> .agg([函数, 函数])
+    fixed_code = re.sub(
+        r'(\.agg\s*\(\s*)\(\s*([^)]+?)\s*\)(\s*\))',
+        r'\1[\2]\3',  # 使用 \3 而不是 \4
+        fixed_code
+    )
+    
+    # 修复 .pivot_table 中 index 和 columns 参数的元组使用
+    # 修复 index 参数
+    fixed_code = re.sub(
+        r'(\.pivot_table\s*\([^)]*?index\s*=\s*)\(\s*([^)]+?)\s*\)(\s*[^)]*?\))',
+        r'\1[\2]\3',
+        fixed_code
+    )
+    
+    # 修复 columns 参数
+    fixed_code = re.sub(
+        r'(\.pivot_table\s*\([^)]*?columns\s*=\s*)\(\s*([^)]+?)\s*\)(\s*[^)]*?\))',
+        r'\1[\2]\3',
+        fixed_code
+    )
+    
+    return fixed_code
 
 
 def _clean_generated_code(code: str) -> str:
@@ -198,9 +284,8 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
                 task_columns = task_plan.get("columns", [])
                 
                 # 检查任务计划中是否涉及多个工作表中的不同列
-                has_cross_sheet_analysis = any("_月末" in col for col in task_columns) or \
-                                          any("Sheet" in col for col in task_columns) or \
-                                          len([col for col in task_columns if "客户编码清单" in col]) > 1
+                has_cross_sheet_analysis = any("Sheet" in col for col in task_columns) or \
+                                          len([col for col in task_columns if "编码" in col or "ID" in col or "id" in col]) > 1
                                           
                 if has_cross_sheet_analysis:
                     # 如果需要跨工作表分析，使用专门的处理函数
@@ -230,7 +315,7 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
             current_df = df
             # 如果操作涉及到特定的跨工作表列，我们需要动态处理
             op_column = op.get("column", "")
-            if isinstance(op_column, list) and any("_月末" in col or "Sheet" in col for col in op_column):
+            if isinstance(op_column, list) and any("Sheet" in col for col in op_column):
                 # 这是跨工作表操作，需要特殊处理
                 if multi_sheet_data and len(multi_sheet_data) >= 2:
                     # 重新构建DataFrame以包含所有工作表的列
@@ -244,44 +329,38 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
                         second_df = multi_sheet_data[second_sheet_name].copy()
                         
                         # 重命名列以区分不同工作表
-                        first_customer_col = [col for col in first_df.columns if "客户编码" in col]
-                        second_customer_col = [col for col in second_df.columns if "客户编码" in col]
-                        first_team_col = [col for col in first_df.columns if "团队" in col]
-                        second_team_col = [col for col in second_df.columns if "团队" in col]
+                        # 获取所有列名（不使用硬编码的关键词）
+                        first_cols = list(first_df.columns)
+                        second_cols = list(second_df.columns)
                         
-                        if first_customer_col and second_customer_col:
-                            first_customer_col = first_customer_col[0]
-                            second_customer_col = second_customer_col[0]
+                        # 如果存在列，则使用第一个列作为主要标识列
+                        if first_cols and second_cols:
+                            first_main_col = first_cols[0]  # 使用第一个列
+                            second_main_col = second_cols[0]  # 使用第一个列
                             
-                            # 重命名列
-                            first_rename_dict = {first_customer_col: f"{first_sheet_name}_{first_customer_col}"}
-                            if first_team_col:
-                                first_rename_dict[first_team_col[0]] = f"{first_sheet_name}_{first_team_col[0]}"
+                            # 重命名主要列
+                            first_rename_dict = {first_main_col: f"{first_sheet_name}_{first_main_col}"}
+                            second_rename_dict = {second_main_col: f"{second_sheet_name}_{second_main_col}"}
                             
-                            second_rename_dict = {second_customer_col: f"{second_sheet_name}_{second_customer_col}"}
-                            if second_team_col:
-                                second_rename_dict[second_team_col[0]] = f"{second_sheet_name}_{second_team_col[0]}"
+                            # 重命名其他列
+                            for col in first_cols[1:]:
+                                first_rename_dict[col] = f"{first_sheet_name}_{col}"
+                            for col in second_cols[1:]:
+                                second_rename_dict[col] = f"{second_sheet_name}_{col}"
                             
                             first_df_renamed = first_df.rename(columns=first_rename_dict)
                             second_df_renamed = second_df.rename(columns=second_rename_dict)
                             
-                            # 尝试合并两个DataFrame（如果它们有可合并的结构）
-                            # 如果没有共同的列（如客户ID），则无法直接合并，需要特殊处理
-                            if first_team_col and second_team_col:
-                                # 创建一个客户对比DataFrame
-                                first_customers = first_df_renamed[f"{first_sheet_name}_{first_customer_col}"].dropna()
-                                second_customers = second_df_renamed[f"{second_sheet_name}_{second_customer_col}"].dropna()
-                                
-                                # 为每个客户添加期初和期末信息
-                                first_df_renamed['_period'] = first_sheet_name
-                                second_df_renamed['_period'] = second_sheet_name
-                                
-                                current_df = pd.concat([first_df_renamed, second_df_renamed], ignore_index=True)
-                            else:
-                                # 如果没有团队列，也尝试合并
-                                first_df_renamed['_period'] = first_sheet_name
-                                second_df_renamed['_period'] = second_sheet_name
-                                current_df = pd.concat([first_df_renamed, second_df_renamed], ignore_index=True)
+                            # 尝试合并两个DataFrame
+                            first_df_renamed['_period'] = first_sheet_name
+                            second_df_renamed['_period'] = second_sheet_name
+                            
+                            current_df = pd.concat([first_df_renamed, second_df_renamed], ignore_index=True)
+                        else:
+                            # 如果没有列，使用原始DataFrame
+                            first_df['_period'] = first_sheet_name
+                            second_df['_period'] = second_sheet_name
+                            current_df = pd.concat([first_df, second_df], ignore_index=True)
             
             # 使用大模型生成代码来执行操作
             user_request = f"""
@@ -295,15 +374,16 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
             可用的变量是df（DataFrame）。
             """
             
-            model_params = {
-                'model': settings.get('modelName', 'qwen-max') if settings else 'qwen-max',
-                'temperature': 0.1,
-                'max_tokens': 1024,
-                'top_p': 0.8,
-                'frequency_penalty': 0.5,
-                'api_key': api_key,
-                'base_url': settings.get('baseUrl', None) if settings else None,
-            }
+            from .qwen_engine import create_model_params
+            model_params = create_model_params(
+                settings=settings or {},
+                api_key=api_key,
+                default_model='qwen-max',
+                default_temperature=0.1,
+                default_max_tokens=1024,
+                default_top_p=0.8,
+                default_frequency_penalty=0.5
+            )
             
             # 生成代码
             generated_code = chat_with_llm(user_request, **model_params)
@@ -314,10 +394,16 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
             if execution_result["success"]:
                 results[f"{op_name}_result"] = _convert_pandas_types(execution_result["result"])
             else:
-                results[f"{op_name}_error"] = f"代码执行错误: {execution_result['error']}"
+                # 如果执行失败，记录错误信息但继续处理其他操作
+                error_msg = execution_result['error']
+                results[f"{op_name}_error"] = f"代码执行错误: {error_msg}"
+                logger.warning(f"操作 {op_name} 执行失败: {error_msg}")
                 
         except Exception as e:
-            results[op.get("name", "unknown")] = f"处理错误: {str(e)}"
+            # 捕获所有异常，记录错误但继续处理其他操作
+            error_msg = str(e)
+            results[op.get("name", "unknown")] = f"处理错误: {error_msg}"
+            logger.error(f"处理操作 {op} 时出错: {error_msg}")
     
     return results
 
@@ -327,7 +413,7 @@ def _handle_cross_sheet_operations(multi_sheet_data, task_plan, api_key, setting
     处理跨工作表操作，如客户留存分析等
     """
     # 创建一个DataFrame来存储跨工作表分析结果
-    # 这里我们假设工作表的结构相似，例如都是包含客户编码和团队信息的表
+            # 这里我们假设工作表的结构相似，例如都是包含ID和分类信息的表
     
     if len(multi_sheet_data) < 2:
         # 如果只有一个工作表，返回该工作表的数据
@@ -336,7 +422,7 @@ def _handle_cross_sheet_operations(multi_sheet_data, task_plan, api_key, setting
     # 获取工作表名称列表
     sheet_names = list(multi_sheet_data.keys())
     
-    # 假设我们要比较第一个和第二个工作表（如1月末和2月末）
+                            # 假设我们要比较第一个和第二个工作表
     if len(sheet_names) >= 2:
         first_sheet_name = sheet_names[0]
         second_sheet_name = sheet_names[1]
@@ -344,90 +430,102 @@ def _handle_cross_sheet_operations(multi_sheet_data, task_plan, api_key, setting
         first_df = multi_sheet_data[first_sheet_name].copy()
         second_df = multi_sheet_data[second_sheet_name].copy()
         
-        # 获取客户编码列的名称
-        first_customer_col = [col for col in first_df.columns if "客户编码" in col or "编码" in col]
-        second_customer_col = [col for col in second_df.columns if "客户编码" in col or "编码" in col]
+        # 获取第一列作为标识列（通常第一列是ID或编码列），而不是硬编码关键词
+        first_cols = list(first_df.columns)
+        second_cols = list(second_df.columns)
         
-        if first_customer_col and second_customer_col:
-            first_customer_col = first_customer_col[0]
-            second_customer_col = second_customer_col[0]
+        if first_cols and second_cols:
+            first_id_col = first_cols[0]  # 使用第一个列
+            second_id_col = second_cols[0]  # 使用第一个列
             
-            # 获取团队列的名称
-            first_team_col = [col for col in first_df.columns if "团队" in col]
-            second_team_col = [col for col in second_df.columns if "团队" in col]
-            
-            first_team_col = first_team_col[0] if first_team_col else None
-            second_team_col = second_team_col[0] if second_team_col else None
+            # 获取其他列（可能是分类列或其他属性列）
+            first_other_cols = first_cols[1:]
+            second_other_cols = second_cols[1:]
             
             # 为每个DataFrame添加工作表标识
-            first_df = first_df.rename(columns={first_customer_col: f"{first_sheet_name}_{first_customer_col}",
-                                                first_team_col: f"{first_sheet_name}_{first_team_col}"}) if first_team_col else first_df.rename(columns={first_customer_col: f"{first_sheet_name}_{first_customer_col}"})
-            second_df = second_df.rename(columns={second_customer_col: f"{second_sheet_name}_{second_customer_col}",
-                                                  second_team_col: f"{second_sheet_name}_{second_team_col}"}) if second_team_col else second_df.rename(columns={second_customer_col: f"{second_sheet_name}_{second_customer_col}"})
+            rename_dict = {first_id_col: f"{first_sheet_name}_{first_id_col}"}
+            # 重命名其他列
+            for col in first_other_cols:
+                rename_dict[col] = f"{first_sheet_name}_{col}"
+            
+            first_df_renamed = first_df.rename(columns=rename_dict)
+            
+            rename_dict = {second_id_col: f"{second_sheet_name}_{second_id_col}"}
+            # 重命名其他列
+            for col in second_other_cols:
+                rename_dict[col] = f"{second_sheet_name}_{col}"
+            
+            second_df_renamed = second_df.rename(columns=rename_dict)
             
             # 重命名后重新获取列名
-            first_customer_col_renamed = f"{first_sheet_name}_{first_customer_col}"
-            second_customer_col_renamed = f"{second_sheet_name}_{second_customer_col}"
-            first_team_col_renamed = f"{first_sheet_name}_{first_team_col}" if first_team_col else None
-            second_team_col_renamed = f"{second_sheet_name}_{second_team_col}" if second_team_col else None
+            first_id_col_renamed = f"{first_sheet_name}_{first_id_col}"
+            second_id_col_renamed = f"{second_sheet_name}_{second_id_col}"
             
-            # 获取两个时间点的客户集合
-            first_customers = set(first_df[first_customer_col_renamed].dropna())
-            second_customers = set(second_df[second_customer_col_renamed].dropna())
+            # 获取两个时间点的项集合
+            first_items = set(first_df_renamed[first_id_col_renamed].dropna())
+            second_items = set(second_df_renamed[second_id_col_renamed].dropna())
             
-            # 计算留存、新增、流失客户
-            retained_customers = first_customers & second_customers  # 两个时间点都有的客户
-            new_customers = second_customers - first_customers       # 新增客户
-            lost_customers = first_customers - second_customers      # 流失客户
+            # 计算留存、新增、流失项
+            retained_items = first_items & second_items  # 两个时间点都有的项
+            new_items = second_items - first_items       # 新增项
+            lost_items = first_items - second_items      # 流失项
             
             # 创建留存分析结果DataFrame
             retention_data = {
-                'retained_customers_count': [len(retained_customers)],
-                'new_customers_count': [len(new_customers)],
-                'lost_customers_count': [len(lost_customers)],
-                'first_period_total': [len(first_customers)],
-                'second_period_total': [len(second_customers)],
-                'retention_rate': [len(retained_customers) / len(first_customers) if len(first_customers) > 0 else 0]
+                'retained_items_count': [len(retained_items)],
+                'new_items_count': [len(new_items)],
+                'lost_items_count': [len(lost_items)],
+                'first_period_total': [len(first_items)],
+                'second_period_total': [len(second_items)],
+                'retention_rate': [len(retained_items) / len(first_items) if len(first_items) > 0 else 0]
             }
             
             # 创建一个包含留存分析结果的DataFrame
             result_df = pd.DataFrame(retention_data)
             
-            # 添加原始数据的统计信息
-            if first_team_col_renamed and second_team_col_renamed:
-                # 按团队统计各时间点的客户数量
-                first_team_counts = first_df[first_team_col_renamed].value_counts() if first_team_col else pd.Series([], dtype=object)
-                second_team_counts = second_df[second_team_col_renamed].value_counts() if second_team_col else pd.Series([], dtype=object)
+            # 如果存在其他列，添加原始数据的统计信息
+            if first_other_cols and second_other_cols:
+                # 使用第一个其他列作为分组列（比如分类列或任何其他分组列）
+                first_group_col = f"{first_sheet_name}_{first_other_cols[0]}"
+                second_group_col = f"{second_sheet_name}_{second_other_cols[0]}"
                 
-                # 合并统计结果
-                if not first_team_counts.empty and not second_team_counts.empty:
-                    team_comparison = pd.DataFrame({
-                        f'{first_sheet_name}_count': first_team_counts,
-                        f'{second_sheet_name}_count': second_team_counts
-                    }).fillna(0)
+                # 按分组列统计各时间点的数量
+                try:
+                    first_group_counts = first_df_renamed[first_group_col].value_counts() if first_group_col in first_df_renamed.columns else pd.Series([], dtype=object)
+                    second_group_counts = second_df_renamed[second_group_col].value_counts() if second_group_col in second_df_renamed.columns else pd.Series([], dtype=object)
                     
-                    # 将团队比较数据添加到结果中
-                    for team in team_comparison.index:
-                        result_df[f'{team}_change'] = team_comparison.loc[team, f'{second_sheet_name}_count'] - \
-                                                      team_comparison.loc[team, f'{first_sheet_name}_count']
-                elif not first_team_counts.empty:
-                    team_comparison = pd.DataFrame({
-                        f'{first_sheet_name}_count': first_team_counts
-                    })
-                    for team in team_comparison.index:
-                        result_df[f'{team}_change'] = -team_comparison.loc[team, f'{first_sheet_name}_count']
-                elif not second_team_counts.empty:
-                    team_comparison = pd.DataFrame({
-                        f'{second_sheet_name}_count': second_team_counts
-                    })
-                    for team in team_comparison.index:
-                        result_df[f'{team}_change'] = team_comparison.loc[team, f'{second_sheet_name}_count']
+                    # 合并统计结果
+                    if not first_group_counts.empty and not second_group_counts.empty:
+                        group_comparison = pd.DataFrame({
+                            f'{first_sheet_name}_count': first_group_counts,
+                            f'{second_sheet_name}_count': second_group_counts
+                        }).fillna(0)
+                        
+                        # 将分组比较数据添加到结果中
+                        for group in group_comparison.index:
+                            result_df[f'{group}_change'] = group_comparison.loc[group, f'{second_sheet_name}_count'] - \
+                                                          group_comparison.loc[group, f'{first_sheet_name}_count']
+                    elif not first_group_counts.empty:
+                        group_comparison = pd.DataFrame({
+                            f'{first_sheet_name}_count': first_group_counts
+                        })
+                        for group in group_comparison.index:
+                            result_df[f'{group}_change'] = -group_comparison.loc[group, f'{first_sheet_name}_count']
+                    elif not second_group_counts.empty:
+                        group_comparison = pd.DataFrame({
+                            f'{second_sheet_name}_count': second_group_counts
+                        })
+                        for group in group_comparison.index:
+                            result_df[f'{group}_change'] = group_comparison.loc[group, f'{second_sheet_name}_count']
+                except:
+                    # 如果分组统计失败，跳过这部分
+                    pass
             
             # 同时创建一个合并的DataFrame，其中包含所有跨工作表的信息
             # 为每个DataFrame添加工作表标签
-            first_df_with_label = first_df.copy()
+            first_df_with_label = first_df_renamed.copy()
             first_df_with_label['_period'] = first_sheet_name
-            second_df_with_label = second_df.copy()
+            second_df_with_label = second_df_renamed.copy()
             second_df_with_label['_period'] = second_sheet_name
             
             # 合并两个数据框
@@ -439,7 +537,7 @@ def _handle_cross_sheet_operations(multi_sheet_data, task_plan, api_key, setting
             
             return combined_df
         else:
-            # 如果没有找到客户编码列，返回第一个工作表的数据
+            # 如果没有找到列，返回第一个工作表的数据
             return first_df
     else:
         # 如果没有多个工作表，返回第一个工作表的数据

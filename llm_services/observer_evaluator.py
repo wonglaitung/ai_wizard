@@ -75,17 +75,17 @@ def evaluate_analysis_results(task_plan: Dict[str, Any],
     """
     
     # 准备模型参数 - 使用传入的settings参数
+    from .qwen_engine import create_model_params
+    
     settings = settings or {}
     
-    model_params = {
-        'model': settings.get('modelName', 'qwen-max'),
-        'temperature': min(settings.get('temperature', 0.7), 0.3),  # 评估时使用较低温度确保一致性
-        'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
-        'top_p': settings.get('topP', 0.9),
-        'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-        'api_key': api_key,  # 只使用传入的api_key参数
-        'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
-    }
+    model_params = create_model_params(
+        settings=settings,
+        api_key=api_key,
+        default_model='qwen-max',
+        default_temperature=min(settings.get('temperature', 0.7), 0.3),  # 评估时使用较低温度确保一致性
+        default_max_tokens=2048   # 使用用户配置的值，但确保足够大
+    )
     
     try:
         # 调用LLM进行评估

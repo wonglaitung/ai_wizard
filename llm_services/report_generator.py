@@ -61,17 +61,15 @@ def generate_report(task_plan, computation_results, api_key=None, output_as_tabl
     try:
         # 准备模型参数 - 只使用传入的参数
         # 使用传入的settings参数，不使用单独传入的model_name和base_url参数
-        settings = settings or {}
+        from .qwen_engine import create_model_params
         
-        model_params = {
-            'model': settings.get('modelName', 'qwen-max'),
-            'temperature': settings.get('temperature', 0.5),  # 报告生成使用中等温度以平衡创造性和一致性
-            'max_tokens': settings.get('maxTokens', 2048),  # 使用用户配置的值，但确保足够大
-            'top_p': settings.get('topP', 0.9),
-            'frequency_penalty': settings.get('frequencyPenalty', 0.5),
-            'api_key': api_key,  # 只使用传入的api_key参数
-            'base_url': settings.get('baseUrl', None),  # 使用settings中的baseUrl
-        }
+        model_params = create_model_params(
+            settings=settings or {},
+            api_key=api_key,
+            default_model='qwen-max',
+            default_temperature=0.5,  # 报告生成使用中等温度以平衡创造性和一致性
+            default_max_tokens=2048   # 使用用户配置的值，但确保足够大
+        )
         
         # 调用大模型生成报告
         report = chat_with_llm(prompt, **model_params)
