@@ -413,6 +413,8 @@ function displayMessage(message, sender) {
 // 获取AI回复
 async function getAIResponse(userMessage) {
     try {
+        // 显示漏斗图标
+        showFunnelIndicator();
         // 显示"正在输入"提示
         let typingIndicator = displayTypingIndicator();
         
@@ -459,6 +461,8 @@ async function getAIResponse(userMessage) {
         });
         
         if (!response.ok) {
+            // 隐藏漏斗图标
+            hideFunnelIndicator();
             // 尝试获取详细的错误信息
             const errorText = await response.text();
             let errorMessage = `HTTP error! status: ${response.status}`;
@@ -552,6 +556,8 @@ async function getAIResponse(userMessage) {
                             } else if (aiMessageElement) {
                                 checkAndRenderChart(aiMessageElement);
                             }
+                            // 隐藏漏斗图标
+                            hideFunnelIndicator();
                             return;
                         }
                         
@@ -586,6 +592,8 @@ async function getAIResponse(userMessage) {
                                     }
                                     chatMessages.scrollTop = chatMessages.scrollHeight;
                                 }
+                                // 隐藏漏斗图标
+                                hideFunnelIndicator();
                                 return;
                             }
                             
@@ -712,6 +720,8 @@ async function getAIResponse(userMessage) {
             }
         }
     } catch (error) {
+        // 隐藏漏斗图标
+        hideFunnelIndicator();
         // 移除"正在输入"提示
         if (outputToggle.checked) {
             const outputTypingIndicator = outputMessages.querySelector('.output-ai-message');
@@ -1046,6 +1056,42 @@ function displayTypingIndicator() {
     }
     
     return { chatIndicator: chatIndicator, outputIndicator: outputIndicator };
+}
+
+// 显示漏斗图标
+function showFunnelIndicator() {
+    // 创建漏斗图标元素
+    const funnelElement = document.createElement('div');
+    funnelElement.id = 'funnel-indicator';
+    funnelElement.innerHTML = '⏳ 处理中...';
+    funnelElement.style.position = 'relative';
+    funnelElement.style.display = 'inline-block';
+    funnelElement.style.fontSize = '14px';
+    funnelElement.style.fontWeight = 'bold';
+    funnelElement.style.color = '#666';
+    funnelElement.style.margin = '5px 0';
+    funnelElement.style.padding = '5px 10px';
+    funnelElement.style.border = '1px solid #ddd';
+    funnelElement.style.borderRadius = '15px';
+    funnelElement.style.backgroundColor = '#f9f9f9';
+    funnelElement.style.zIndex = '1000';
+    
+    // 根据输出开关状态决定显示位置
+    if (outputToggle.checked) {
+        outputMessages.appendChild(funnelElement);
+        outputMessages.scrollTop = outputMessages.scrollHeight;
+    } else {
+        chatMessages.appendChild(funnelElement);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+// 隐藏漏斗图标
+function hideFunnelIndicator() {
+    const funnelElement = document.getElementById('funnel-indicator');
+    if (funnelElement) {
+        funnelElement.remove();
+    }
 }
 
 // 配置页面功能
