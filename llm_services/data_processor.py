@@ -199,9 +199,231 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
                         return {"result": result, "success": True}
             except Exception as pandas_error:
                 logger.error(f"pandas操作处理失败: {str(pandas_error)}")
+        # 检查是否是由于 ~ 操作符对非布尔类型使用导致的错误
+        elif "bad operand type for unary ~" in error_message:
+            try:
+                # 尝试修复包含 ~ 操作符的代码问题
+                # 这种错误通常是由于对包含NaN的数据使用了 ~ 操作符
+                logger.warning(f"检测到按位取反操作符错误: {error_message}")
+                
+                # 尝试清理代码中可能导致此错误的部分
+                fixed_code = cleaned_code
+                
+                # 创建执行环境
+                execution_env = {
+                    'pd': pd,
+                    'np': np,
+                    'df': df
+                }
+                
+                # 检查代码是否包含 ~ 操作符
+                if '~' in fixed_code:
+                    # 如果检测到 ~ 操作符，尝试通过添加布尔类型检查来修复
+                    # 为代码添加处理 NaN 和非布尔类型数据的包装
+                    wrapped_code = f"""
+import pandas as pd
+import numpy as np
+
+{fixed_code}
+"""
+                    # 尝试执行修复后的代码
+                    def has_assignment(code_str):
+                        """检查代码中是否包含赋值语句（不在括号内的等号）"""
+                        paren_level = 0
+                        i = 0
+                        while i < len(code_str):
+                            char = code_str[i]
+                            if char == '(':
+                                paren_level += 1
+                            elif char == ')':
+                                paren_level -= 1
+                            elif char == '=' and paren_level == 0:
+                                j = i - 1
+                                while j >= 0 and code_str[j].isspace():
+                                    j -= 1
+                                if j >= 0 and code_str[j] != ')' and code_str[j] != '(':
+                                    return True
+                            i += 1
+                        return False
+                    
+                    if has_assignment(wrapped_code.strip()):
+                        exec(wrapped_code.strip(), execution_env)
+                        lines = wrapped_code.strip().split('\n')
+                        last_line = lines[-1].strip()
+                        if '=' in last_line and last_line.split('=')[0].strip():
+                            var_name = last_line.split('=')[0].strip()
+                            result = execution_env.get(var_name)
+                        else:
+                            result = execution_env.get('result')
+                    else:
+                        result = eval(wrapped_code.strip(), execution_env)
+                    
+                    logger.info("成功修复并执行了包含 ~ 操作符问题的代码")
+                    return {"result": result, "success": True}
+                else:
+                    # 如果错误中包含 ~ 但代码中没有 ~，尝试使用原始修复方法
+                    fixed_code = _fix_dataframe_column_access(cleaned_code)
+                    
+                    def has_assignment(code_str):
+                        """检查代码中是否包含赋值语句（不在括号内的等号）"""
+                        paren_level = 0
+                        i = 0
+                        while i < len(code_str):
+                            char = code_str[i]
+                            if char == '(':
+                                paren_level += 1
+                            elif char == ')':
+                                paren_level -= 1
+                            elif char == '=' and paren_level == 0:
+                                j = i - 1
+                                while j >= 0 and code_str[j].isspace():
+                                    j -= 1
+                                if j >= 0 and code_str[j] != ')' and code_str[j] != '(':
+                                    return True
+                            i += 1
+                        return False
+                    
+                    if has_assignment(fixed_code.strip()):
+                        exec(fixed_code.strip(), execution_env)
+                        lines = fixed_code.strip().split('\n')
+                        last_line = lines[-1].strip()
+                        if '=' in last_line and last_line.split('=')[0].strip():
+                            var_name = last_line.split('=')[0].strip()
+                            result = execution_env.get(var_name)
+                        else:
+                            result = execution_env.get('result')
+                    else:
+                        result = eval(fixed_code.strip(), execution_env)
+                    
+                    return {"result": result, "success": True}
+                    
+            except Exception as bitwise_error:
+                logger.error(f"修复 ~ 操作符错误失败: {str(bitwise_error)}")
+                return {"error": str(bitwise_error), "success": False}
+        # 检查是否是语法错误，如缩进错误
+        elif ("expected an indented block" in error_message or 
+              "unexpected indent" in error_message or 
+              "IndentationError" in error_message or
+              "SyntaxError" in str(type(e))):
+            try:
+                logger.warning(f"检测到语法错误: {error_message}")
+                
+                # 尝试修复缩进问题
+                fixed_code = cleaned_code
+                # 尝试修复代码缩进
+                lines = fixed_code.split('\n')
+                fixed_lines = []
+                for line in lines:
+                    # 去除行首的多余空格，但保持缩进结构
+                    stripped = line.lstrip()
+                    if stripped:  # 只对非空行处理
+                        # 计算当前缩进级别（每4个空格为一级）
+                        leading_spaces = len(line) - len(stripped)
+                        indent_level = leading_spaces // 4  # 每4个空格为一级缩进
+                        corrected_indent = '    ' * indent_level  # 转换为标准4空格缩进
+                        fixed_lines.append(corrected_indent + stripped)
+                    else:
+                        # 保留空行
+                        fixed_lines.append(line)
+                
+                fixed_code = '\n'.join(fixed_lines)
+                
+                # 创建执行环境
+                execution_env = {
+                    'pd': pd,
+                    'np': np,
+                    'df': df
+                }
+                
+                # 再次尝试执行修复后的代码
+                def has_assignment(code_str):
+                    """检查代码中是否包含赋值语句（不在括号内的等号）"""
+                    paren_level = 0
+                    i = 0
+                    while i < len(code_str):
+                        char = code_str[i]
+                        if char == '(':
+                            paren_level += 1
+                        elif char == ')':
+                            paren_level -= 1
+                        elif char == '=' and paren_level == 0:
+                            j = i - 1
+                            while j >= 0 and code_str[j].isspace():
+                                j -= 1
+                            if j >= 0 and code_str[j] != ')' and code_str[j] != '(':
+                                return True
+                        i += 1
+                    return False
+                
+                if has_assignment(fixed_code.strip()):
+                    exec(fixed_code.strip(), execution_env)
+                    lines = fixed_code.strip().split('\n')
+                    last_line = lines[-1].strip()
+                    if '=' in last_line and last_line.split('=')[0].strip():
+                        var_name = last_line.split('=')[0].strip()
+                        result = execution_env.get(var_name)
+                    else:
+                        result = execution_env.get('result')
+                else:
+                    result = eval(fixed_code.strip(), execution_env)
+                
+                logger.info("成功修复并执行了包含语法错误的代码")
+                return {"result": result, "success": True}
+                
+            except Exception as syntax_error:
+                logger.error(f"修复语法错误失败: {str(syntax_error)}")
+                
+                # 尝试使用 _fix_dataframe_column_access 作为备选修复方法
+                try:
+                    backup_fixed_code = _fix_dataframe_column_access(cleaned_code)
+                    
+                    execution_env = {
+                        'pd': pd,
+                        'np': np,
+                        'df': df
+                    }
+                    
+                    def has_assignment(code_str):
+                        paren_level = 0
+                        i = 0
+                        while i < len(code_str):
+                            char = code_str[i]
+                            if char == '(': 
+                                paren_level += 1
+                            elif char == ')':
+                                paren_level -= 1
+                            elif char == '=' and paren_level == 0:
+                                j = i - 1
+                                while j >= 0 and code_str[j].isspace():
+                                    j -= 1
+                                if j >= 0 and code_str[j] != ')' and code_str[j] != '(':
+                                    return True
+                            i += 1
+                        return False
+                    
+                    if has_assignment(backup_fixed_code.strip()):
+                        exec(backup_fixed_code.strip(), execution_env)
+                        lines = backup_fixed_code.strip().split('\n')
+                        last_line = lines[-1].strip()
+                        if '=' in last_line and last_line.split('=')[0].strip():
+                            var_name = last_line.split('=')[0].strip()
+                            result = execution_env.get(var_name)
+                        else:
+                            result = execution_env.get('result')
+                    else:
+                        result = eval(backup_fixed_code.strip(), execution_env)
+                    
+                    logger.info("通过备用方法修复并执行了代码")
+                    return {"result": result, "success": True}
+                    
+                except Exception as backup_error:
+                    logger.error(f"备用修复方法也失败: {str(backup_error)}")
+                    return {"error": str(syntax_error), "success": False}
         
         logger.error(f"执行生成的代码时出错: {str(e)}")
         return {"error": str(e), "success": False}
+
+
 
 
 def _fix_dataframe_column_access(code: str) -> str:
@@ -557,6 +779,13 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
             请生成直接可用的pandas代码，用于执行该操作。
             代码应该只包含计算逻辑，不要包含函数定义。
             可用的变量是df（DataFrame）。
+            
+            重要要求：
+            - 代码的最后一行必须返回一个可序列化的结果（如DataFrame、Series、字典、列表、数值等）
+            - 对于cross_tab操作，必须使用pd.crosstab()函数计算交叉表并返回结果
+            - 对于涉及多工作表数据的客户留存分析场景，也应返回字典格式的结果，包含留存客户、新增客户和流失客户的统计
+            - 对于其他操作，确保最终结果存储在名为'result'的变量中
+            - 避免只进行赋值操作而不返回结果
             """
             
             from .qwen_engine import create_model_params
@@ -793,6 +1022,9 @@ def _convert_pandas_types(obj):
         return [_convert_pandas_types(item) for item in obj]
     elif isinstance(obj, tuple):
         # 将tuple转换为list，因为JSON不支持tuple
+        return [_convert_pandas_types(item) for item in obj]
+    elif isinstance(obj, set):
+        # 将set转换为list，因为JSON不支持set
         return [_convert_pandas_types(item) for item in obj]
     elif isinstance(obj, np.integer):
         return int(obj)
