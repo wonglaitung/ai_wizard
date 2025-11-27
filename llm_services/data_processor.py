@@ -310,7 +310,61 @@ import numpy as np
                 
                 # 尝试修复缩进问题
                 fixed_code = cleaned_code
-                # 尝试修复代码缩进
+                
+                # 首先，检查是否是if/for/while/elif/else/try/except等语句后缺少缩进块
+                # 这种情况需要特殊处理
+                lines = fixed_code.split('\n')
+                fixed_lines = []
+                i = 0
+                while i < len(lines):
+                    current_line = lines[i].rstrip()  # 移除行尾空白
+                    stripped = current_line.lstrip()
+                    
+                    # 检查是否是控制流语句（以冒号结尾但后面没有缩进块）
+                    is_control_statement = (stripped.startswith('if ') or 
+                                            stripped.startswith('for ') or 
+                                            stripped.startswith('while ') or 
+                                            stripped.startswith('def ') or 
+                                            stripped.startswith('class ') or 
+                                            stripped.startswith('try:') or
+                                            stripped.startswith('except ') or
+                                            stripped.startswith('elif ') or
+                                            stripped.startswith('else:') or
+                                            stripped.startswith('with '))
+                    
+                    if is_control_statement and stripped.endswith(':'):
+                        # 检查下一行是否存在且是否有适当的缩进
+                        if i + 1 < len(lines):
+                            next_line = lines[i + 1]
+                            next_stripped = next_line.lstrip()
+                            
+                            # 如果下一行没有缩进（即没有缩进的非空行），说明应该将其作为if块的一部分
+                            if len(next_line) > 0 and next_line == next_stripped:  # 没有缩进且不是空行
+                                # 将当前行和下一行都添加到结果中，但给下一行加上缩进
+                                indent = len(current_line) - len(stripped)
+                                indent_str = ' ' * indent
+                                fixed_lines.append(current_line)  # if语句行
+                                # 将下一行缩进4个空格使其成为if块的一部分
+                                fixed_lines.append(indent_str + '    ' + next_stripped)
+                                i += 2  # 跳过这两行
+                            else:
+                                # 下一行有缩进或为空行，正常添加当前行
+                                fixed_lines.append(current_line)
+                                i += 1
+                        else:
+                            # 没有下一行，添加一个pass语句
+                            indent = len(current_line) - len(stripped)
+                            indent_str = ' ' * indent
+                            fixed_lines.append(current_line)
+                            fixed_lines.append(indent_str + '    pass')
+                            i += 1
+                    else:
+                        fixed_lines.append(lines[i])
+                        i += 1
+                
+                fixed_code = '\n'.join(fixed_lines)
+                
+                # 然后，标准化缩进
                 lines = fixed_code.split('\n')
                 fixed_lines = []
                 for line in lines:
