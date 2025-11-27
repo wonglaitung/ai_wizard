@@ -30,14 +30,38 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
             'df': df
         }
         
-        # 检查代码是否包含赋值语句
-        if '=' in cleaned_code.strip():
+        # 检查代码是否包含赋值语句（仅检查不在括号内的等号）
+        # 这样可以区分真正的赋值语句和函数参数中的等号
+        def has_assignment(code_str):
+            """检查代码中是否包含赋值语句（不在括号内的等号）"""
+            paren_level = 0
+            i = 0
+            while i < len(code_str):
+                char = code_str[i]
+                if char == '(':
+                    paren_level += 1
+                elif char == ')':
+                    paren_level -= 1
+                elif char == '=' and paren_level == 0:
+                    # 检查等号前的字符，确保是真正的赋值
+                    # 例如: "result = df.pivot_table(...)" 是赋值
+                    # 但 "df.pivot_table(index='col')" 不是赋值
+                    j = i - 1
+                    while j >= 0 and code_str[j].isspace():
+                        j -= 1
+                    if j >= 0 and code_str[j] != ')' and code_str[j] != '(':
+                        # 检查等号后是否有空格或变量名，这更可能是赋值
+                        return True
+                i += 1
+            return False
+        
+        if has_assignment(cleaned_code.strip()):
             # 对于赋值语句，使用exec执行
             exec(cleaned_code.strip(), execution_env)
             # 返回最后一个变量的值
             lines = cleaned_code.strip().split('\n')
             last_line = lines[-1].strip()
-            if '=' in last_line:
+            if '=' in last_line and last_line.split('=')[0].strip():  # 确实是赋值语句
                 var_name = last_line.split('=')[0].strip()
                 result = execution_env.get(var_name)
             else:
@@ -67,11 +91,32 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
                     'df': df
                 }
                 
-                if '=' in fixed_code.strip():
+                # 同样使用改进的赋值检测逻辑
+                def has_assignment(code_str):
+                    """检查代码中是否包含赋值语句（不在括号内的等号）"""
+                    paren_level = 0
+                    i = 0
+                    while i < len(code_str):
+                        char = code_str[i]
+                        if char == '(':
+                            paren_level += 1
+                        elif char == ')':
+                            paren_level -= 1
+                        elif char == '=' and paren_level == 0:
+                            # 检查等号前的字符，确保是真正的赋值
+                            j = i - 1
+                            while j >= 0 and code_str[j].isspace():
+                                j -= 1
+                            if j >= 0 and code_str[j] != ')' and code_str[j] != '(':
+                                return True
+                        i += 1
+                    return False
+                
+                if has_assignment(fixed_code.strip()):
                     exec(fixed_code.strip(), execution_env)
                     lines = fixed_code.strip().split('\n')
                     last_line = lines[-1].strip()
-                    if '=' in last_line:
+                    if '=' in last_line and last_line.split('=')[0].strip():
                         var_name = last_line.split('=')[0].strip()
                         result = execution_env.get(var_name)
                     else:
@@ -84,6 +129,76 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
             except Exception as fix_error:
                 logger.error(f"修复后的代码执行仍然失败: {str(fix_error)}")
                 return {"error": str(fix_error), "success": False}
+        # 检查是否是由于pandas操作返回了None
+        elif "pivot_table" in code or "groupby" in code:
+            try:
+                # 再次尝试执行原始代码，但这次使用正确的判断逻辑
+                execution_env = {
+                    'pd': pd,
+                    'np': np,
+                    'df': df
+                }
+                
+                # 尝试直接eval带修复的代码
+                fixed_code = _fix_dataframe_column_access(cleaned_code)
+                
+                def has_assignment(code_str):
+                    """检查代码中是否包含赋值语句（不在括号内的等号）"""
+                    paren_level = 0
+                    i = 0
+                    while i < len(code_str):
+                        char = code_str[i]
+                        if char == '(':
+                            paren_level += 1
+                        elif char == ')':
+                            paren_level -= 1
+                        elif char == '=' and paren_level == 0:
+                            j = i - 1
+                            while j >= 0 and code_str[j].isspace():
+                                j -= 1
+                            if j >= 0 and code_str[j] != ')' and code_str[j] != '(':
+                                return True
+                        i += 1
+                    return False
+                
+                if has_assignment(fixed_code.strip()):
+                    exec(fixed_code.strip(), execution_env)
+                    lines = fixed_code.strip().split('\n')
+                    last_line = lines[-1].strip()
+                    if '=' in last_line and last_line.split('=')[0].strip():
+                        var_name = last_line.split('=')[0].strip()
+                        result = execution_env.get(var_name)
+                    else:
+                        result = execution_env.get('result')
+                else:
+                    result = eval(fixed_code.strip(), execution_env)
+                
+                # 检查结果是否为None
+                if result is not None:
+                    logger.info(f"成功执行了pandas操作，结果类型: {type(result)}")
+                    return {"result": result, "success": True}
+                else:
+                    # 如果结果是None，记录日志但继续
+                    logger.warning(f"pandas操作执行成功但返回了None: {fixed_code}")
+                    # 尝试执行一个简单的测试来确认pandas是否正常工作
+                    test_result = eval("df.head(1)", execution_env)
+                    if test_result is not None:
+                        logger.info("pandas环境正常，问题可能在特定操作上")
+                        # 重新尝试执行原始操作
+                        if has_assignment(fixed_code.strip()):
+                            exec(fixed_code.strip(), execution_env)
+                            lines = fixed_code.strip().split('\n')
+                            last_line = lines[-1].strip()
+                            if '=' in last_line and last_line.split('=')[0].strip():
+                                var_name = last_line.split('=')[0].strip()
+                                result = execution_env.get(var_name)
+                            else:
+                                result = execution_env.get('result')
+                        else:
+                            result = eval(fixed_code.strip(), execution_env)
+                        return {"result": result, "success": True}
+            except Exception as pandas_error:
+                logger.error(f"pandas操作处理失败: {str(pandas_error)}")
         
         logger.error(f"执行生成的代码时出错: {str(e)}")
         return {"error": str(e), "success": False}
@@ -104,34 +219,36 @@ def _fix_dataframe_column_access(code: str) -> str:
     )
     
     # 修复 .groupby((列名, 列名)) 这种模式 -> .groupby([列名, 列名])
-    # 正确分析: (\.[a-z]+\s*\(\s*) \s* \( ([^)]+?) \) \s* \)
-    # 第1组: (.groupby\s*\(\s*) - 包含".groupby("的整个部分 
-    # 第2组: ([^)]+?) - 括号内的内容
-    # 第3组: (\s*\)) - 后面的空格和")"
     fixed_code = re.sub(
         r'(\.groupby\s*\(\s*)\(\s*([^)]+?)\s*\)(\s*\))',
-        r'\1[\2]\3',  # 使用 \3 而不是 \4
+        r'\1[\2]\3',  # 修复groupby的元组参数
         fixed_code
     )
     
     # 修复 .agg((函数, 函数)) 这种模式 -> .agg([函数, 函数])
     fixed_code = re.sub(
         r'(\.agg\s*\(\s*)\(\s*([^)]+?)\s*\)(\s*\))',
-        r'\1[\2]\3',  # 使用 \3 而不是 \4
+        r'\1[\2]\3',  # 修复agg的元组参数
         fixed_code
     )
     
-    # 修复 .pivot_table 中 index 和 columns 参数的元组使用
-    # 修复 index 参数
+    # 修复 .pivot_table 中 index 参数的元组使用
     fixed_code = re.sub(
-        r'(\.pivot_table\s*\([^)]*?index\s*=\s*)\(\s*([^)]+?)\s*\)(\s*[^)]*?\))',
+        r'(\.pivot_table\s*\(.*?index\s*=\s*)\(\s*([^)]+?)\s*\)(\s*[,\)])',
         r'\1[\2]\3',
         fixed_code
     )
     
-    # 修复 columns 参数
+    # 修复 .pivot_table 中 columns 参数的元组使用
     fixed_code = re.sub(
-        r'(\.pivot_table\s*\([^)]*?columns\s*=\s*)\(\s*([^)]+?)\s*\)(\s*[^)]*?\))',
+        r'(\.pivot_table\s*\(.*?columns\s*=\s*)\(\s*([^)]+?)\s*\)(\s*[,\)])',
+        r'\1[\2]\3',
+        fixed_code
+    )
+    
+    # 修复 .pivot_table 中 values 参数的元组使用
+    fixed_code = re.sub(
+        r'(\.pivot_table\s*\(.*?values\s*=\s*)\(\s*([^)]+?)\s*\)(\s*[,\)])',
         r'\1[\2]\3',
         fixed_code
     )
@@ -396,6 +513,39 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
                                     updated_columns.append(col)
                             updated_op['column'] = updated_columns
                         op = updated_op
+            # 也处理字典类型的列参数（如pivot_table的index, columns, values）
+            elif isinstance(op_column, dict):
+                # 检查字典中的列名是否包含前缀
+                current_cols = list(current_df.columns)
+                updated_op = op.copy()
+                updated_column_dict = {}
+                
+                for key, value in op_column.items():
+                    if isinstance(value, str) and '_' in value and value.split('_')[0] in ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', '工作表1', '工作表2', '工作表3', '工作表4', '工作表5']:
+                        # 这是一个带前缀的列名，需要映射
+                        actual_col = '_'.join(value.split('_')[1:])
+                        for curr_col in current_cols:
+                            if curr_col == actual_col or curr_col.endswith(actual_col):
+                                updated_column_dict[key] = curr_col
+                                break
+                    elif isinstance(value, list):
+                        # 处理列表类型的值（如values参数）
+                        updated_list = []
+                        for item in value:
+                            if isinstance(item, str) and '_' in item and item.split('_')[0] in ['Sheet1', 'Sheet2', 'Sheet3', 'Sheet4', 'Sheet5', '工作表1', '工作表2', '工作表3', '工作表4', '工作表5']:
+                                actual_col = '_'.join(item.split('_')[1:])
+                                for curr_col in current_cols:
+                                    if curr_col == actual_col or curr_col.endswith(actual_col):
+                                        updated_list.append(curr_col)
+                                        break
+                            else:
+                                updated_list.append(item)
+                        updated_column_dict[key] = updated_list
+                    else:
+                        updated_column_dict[key] = value
+                
+                updated_op['column'] = updated_column_dict
+                op = updated_op
 
             # 使用大模型生成代码来执行操作
             user_request = f"""
