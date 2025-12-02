@@ -43,6 +43,7 @@ class AnalysisState(TypedDict):
     """动态分析流程状态定义"""
     user_message: str
     file_content: str
+    original_file_content: str  # 保存完整的原始文件内容用于数据处理
     chat_history: List[Dict[str, str]]
     settings: Dict[str, Any]
     output_as_table: bool

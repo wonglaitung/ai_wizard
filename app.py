@@ -23,7 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
 try:
     from langgraph_services.analysis_graph import AnalysisState, ChatState, get_analysis_graph, get_chat_graph, get_conditional_graph
     from llm_services.qwen_engine import chat_with_llm_stream
-    from llm_services.chat_history_compressor import compress_chat_history
+    from llm_services.chat_history_compressor import compress_chat_history, estimate_token_count
     from llm_services.data_processor import _convert_pandas_types
     # 获取图实例
     analysis_graph = get_analysis_graph()
@@ -37,6 +37,7 @@ except ImportError as e:
     chat_with_llm_stream = None
     compress_chat_history = None
     _convert_pandas_types = None
+    estimate_token_count = None
     
     # 定义一个默认的压缩函数，以防导入失败
     def compress_chat_history(chat_history, max_tokens=8196, keep_recent_ratio=0.7):
@@ -127,14 +128,41 @@ def chat():
         app.logger.debug(f'接收到聊天数据: {data}')
         
         user_message = data.get('message', '')
-        file_content = data.get('file_content', '')  # 获取上传的文件内容
+        original_file_content = data.get('file_content', '')  # 获取上传的原始文件内容
         chat_history = data.get('history', [])
         settings = data.get('settings', {})
         output_as_table = data.get('outputAsTable', False)
         step_by_step = data.get('stepByStep', False)  # 是否使用分步分析
         
+        # 检查文件内容是否过大，避免超出大模型的上下文限制
+        file_content_preview = original_file_content
+        if original_file_content and estimate_token_count:
+            # 获取配置的maxTokens并计算安全阈值（70%）
+            max_tokens = settings.get('maxTokens', 8196)
+            safe_threshold = int(max_tokens * 0.7)
+            
+            # 估算文件内容的token数量
+            file_token_count = estimate_token_count(original_file_content)
+            
+            # 如果文件内容超过安全阈值，则进行截断
+            if file_token_count > safe_threshold:
+                # 记录截断操作
+                app.logger.info(f'文件内容过大 ({file_token_count} tokens)，已截断用于大模型对话，完整内容用于数据处理')
+                
+                # 根据估算的token数量计算应保留的字符数，使用简单比例计算
+                # 因为estimate_token_count使用的是字符级估算，我们可以反向计算
+                total_chars = len(original_file_content)
+                # 估算平均每个字符对应的token数
+                avg_token_per_char = file_token_count / total_chars if total_chars > 0 else 0.25
+                # 计算应该保留的字符数
+                chars_to_keep = int(safe_threshold / avg_token_per_char) if avg_token_per_char > 0 else safe_threshold
+                
+                # 截取前chars_to_keep个字符作为预览内容
+                file_content_preview = original_file_content[:chars_to_keep]
+                app.logger.debug(f'文件内容已从 {total_chars} 字符截断为 {chars_to_keep} 字符用于大模型')
+
         # 输入验证
-        if not user_message and not file_content:
+        if not user_message and not file_content_preview:
             def error_generator():
                 yield 'data: ' + json.dumps({'error': '消息内容不能为空。'}) + '\n\n'
             return Response(error_generator(), mimetype='text/event-stream')
@@ -148,7 +176,8 @@ def chat():
         # 准备初始状态
         initial_state: AnalysisState = {
             "user_message": user_message,
-            "file_content": file_content,
+            "file_content": file_content_preview,  # 使用截断的预览内容
+            "original_file_content": original_file_content,  # 保存完整的原始文件内容用于数据处理
             "chat_history": compressed_chat_history,
             "settings": settings,
             "output_as_table": output_as_table,

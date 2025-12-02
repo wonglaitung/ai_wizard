@@ -25,7 +25,7 @@ def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
 
     try:
         user_request = state["user_message"]
-        file_content = state["file_content"]
+        file_content = state["file_content"]  # 使用截断的预览内容进行任务规划
         api_key = state["api_key"]
         settings = state.get("settings", {})  # 获取设置参数
         base_url = settings.get('baseUrl')  # 从设置中获取基础URL
@@ -109,7 +109,7 @@ def replan_analysis_task_node(state: AnalysisState) -> AnalysisState:
 
     try:
         user_request = state["user_message"]
-        file_content = state["file_content"]
+        file_content = state["file_content"]  # 使用截断的预览内容进行重规划
         api_key = state["api_key"]
         observation = state.get("observation")
         settings = state.get("settings", {})  # 获取设置参数
@@ -355,7 +355,8 @@ def process_data_node(state: AnalysisState) -> AnalysisState:
 
     try:
         task_plan = state["task_plan"]
-        file_content = state["file_content"]
+        # 优先使用完整的原始文件内容，如果不存在则使用file_content
+        file_content = state.get("original_file_content") or state["file_content"]
         api_key = state["api_key"]
         settings = state.get("settings", {})
 
@@ -556,7 +557,7 @@ def chat_node(state: AnalysisState) -> AnalysisState:
 
     try:
         user_message = state["user_message"]
-        file_content = state["file_content"]
+        file_content = state["file_content"]  # 使用截断的预览内容，避免上下文过长
         chat_history = state["chat_history"]
         settings = state["settings"]
 
