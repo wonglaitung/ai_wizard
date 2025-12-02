@@ -1137,4 +1137,26 @@ input:checked + .slider:before {
     }
 }
 
+/* 下载Word文档按钮样式 */
+.download-word-btn {
+    background: none;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    min-width: 40px;
+    margin-left: 10px;
+}
+
+.download-word-btn:hover {
+    background-color: #e9ecef;
+    border-color: #3498db;
+    transform: scale(1.1);
+}
+
 /* 进度条样式 */
