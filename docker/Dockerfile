@@ -6,6 +6,12 @@ WORKDIR /app
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
+    python3-dev \
+    libxml2-dev \
+    libxslt1-dev \
+    libzip-dev \
+    libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
