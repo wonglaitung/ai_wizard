@@ -835,22 +835,33 @@ function parseTableData(table) {
     }
     
     const datasets = [];
+    let hasNumericData = false; // 标记是否包含数字数据
+    
     // 为每列创建一个数据集（跳过第一列，假设它是标签）
     for (let col = 1; col < headers.length; col++) {
         const data = [];
+        let numericValuesCount = 0; // 记录数字值的数量
+        
         for (let i = 1; i < rows.length; i++) {
             const cell = rows[i].querySelectorAll('th, td')[col];
             if (cell) {
-                const value = parseFloat(cell.textContent.trim());
+                const cellText = cell.textContent.trim();
+                const value = parseFloat(cellText);
                 if (!isNaN(value)) {
                     data.push(value);
+                    numericValuesCount++;
                 } else {
-                    // 如果不是数字，尝试转换
+                    // 如果不是数字，添加0
                     data.push(0);
                 }
             } else {
                 data.push(0);
             }
+        }
+        
+        // 检查这列是否包含足够的数字数据（至少50%的数据是数字）
+        if (numericValuesCount / data.length >= 0.5) {
+            hasNumericData = true;
         }
         
         // 生成一个颜色
@@ -864,6 +875,11 @@ function parseTableData(table) {
             backgroundColor: hexToRgba(color, 0.2),
             borderWidth: 2
         });
+    }
+    
+    // 如果没有足够的数字数据，返回null，不生成图表
+    if (!hasNumericData) {
+        return null;
     }
     
     // 获取标签（第一列）
