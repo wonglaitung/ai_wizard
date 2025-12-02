@@ -36,9 +36,15 @@ def generate_report(task_plan, computation_results, api_key=None, output_as_tabl
     if output_as_table:
         table_instruction = "在报告中，如有可能，请使用表格来组织和呈现数据，以支持业务数据透视和洞察分析。表格应清晰展示关键指标和对比信息，便于进行图表可视化。\n"
     
+    # 获取当前日期
+    from datetime import datetime
+    current_date = datetime.now().strftime("%Y年%m月%d日")
+    
     # 构建提示词，更侧重于业务数据透视和洞察
     prompt = f"""
 你是一个专业的业务数据分析师，专门从事数据透视和业务洞察分析。请根据以下信息生成一份专业的业务分析报告。
+
+报告日期: {current_date}
 
 任务类型: {task_plan.get('task_type', '未知任务')}
 预期输出: {task_plan.get('expected_output', '无预期输出')}
@@ -55,7 +61,7 @@ def generate_report(task_plan, computation_results, api_key=None, output_as_tabl
 5. 行动建议：提供可执行的业务建议和策略
 6. 风险与机遇：识别潜在的业务风险和机遇
 
-请确保报告内容从业务角度出发，专业且易于理解，避免过多技术术语，重点突出业务价值和可操作的洞察。
+请确保报告内容从业务角度出发，专业且易于理解，避免过多技术术语，重点突出业务价值和可操作的洞察。报告必须包含生成日期({current_date})。
 """
     
     try:

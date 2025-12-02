@@ -1328,4 +1328,84 @@ function handleResponseData(jsonData, outputAiMessageElement, aiMessageElement, 
     };
 }
 
-// 重置配置
+// 导出图表输出区内容为Word文档
+function exportToWord() {
+    // 获取图表输出区域的内容
+    const outputContent = document.getElementById('output-messages');
+    if (!outputContent) {
+        console.error('找不到输出消息区域');
+        return;
+    }
+    
+    // 创建HTML内容的副本，以便进行必要的转换
+    const contentClone = outputContent.cloneNode(true);
+    
+    // 处理所有图表并将其转换为图片
+    const chartCanvases = contentClone.querySelectorAll('canvas');
+    chartCanvases.forEach(canvas => {
+        // 创建一个临时canvas用于确保有白色背景
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        
+        // 填充白色背景
+        tempCtx.fillStyle = '#ffffff';
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        
+        // 将原canvas内容绘制到临时canvas上
+        tempCtx.drawImage(canvas, 0, 0);
+        
+        // 将canvas转换为图片
+        const img = document.createElement('img');
+        img.src = tempCanvas.toDataURL('image/png');
+        img.style.width = '100%';
+        img.style.maxWidth = '800px';
+        img.style.height = 'auto';
+        
+        // 替换canvas元素
+        canvas.parentNode.replaceChild(img, canvas);
+    });
+    
+    // 将内容转换为Word文档格式
+    const wordContent = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta charset="utf-8">
+            <title>图表输出</title>
+            <style>
+                * { font-family: "微软雅黑", "Microsoft YaHei", SimSun, sans-serif; }
+                table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+                table, th, td { border: 1px solid #000; }
+                th, td { padding: 8px; text-align: left; }
+                img { max-width: 100%; height: auto; }
+            </style>
+        </head>
+        <body>
+            <h1>AI数据分析报告</h1>
+            <div>
+                ${contentClone.innerHTML}
+            </div>
+        </body>
+        </html>
+    `;
+    
+    // 创建下载链接
+    const blob = new Blob(['\ufeff', wordContent], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'AI数据分析报告_' + new Date().toLocaleDateString() + '.doc';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 为下载Word按钮添加事件监听器
+document.addEventListener('DOMContentLoaded', function() {
+    const downloadWordBtn = document.getElementById('download-word');
+    if (downloadWordBtn) {
+        downloadWordBtn.addEventListener('click', exportToWord);
+    }
+});
