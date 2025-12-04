@@ -355,14 +355,19 @@ def process_data_node(state: AnalysisState) -> AnalysisState:
 
     try:
         task_plan = state["task_plan"]
-        # 优先使用完整的原始文件内容，如果不存在则使用file_content
-        file_content = state.get("original_file_content") or state["file_content"]
+        # 优先使用完整的原始文件内容进行数据处理，如果不存在则使用file_content
+        original_file_content = state.get("original_file_content")
+        preview_file_content = state["file_content"]
+        file_content = original_file_content or preview_file_content
         api_key = state["api_key"]
         settings = state.get("settings", {})
 
         logger.info(f"数据处理 - 任务类型: {task_plan.task_type}")
         logger.info(f"数据处理 - 操作数量: {len(task_plan.operations) if task_plan.operations else 0}")
-        logger.info(f"数据处理 - 文件内容长度: {len(file_content) if file_content else 0}")
+        logger.info(f"数据处理 - original_file_content 存在: {original_file_content is not None}")
+        logger.info(f"数据处理 - original_file_content 长度: {len(original_file_content) if original_file_content else 0}")
+        logger.info(f"数据处理 - preview_file_content 长度: {len(preview_file_content) if preview_file_content else 0}")
+        logger.info(f"数据处理 - 实际使用文件内容长度: {len(file_content) if file_content else 0}")
 
         # 将TaskPlan转换为字典格式以兼容现有函数
         task_plan_dict = {
