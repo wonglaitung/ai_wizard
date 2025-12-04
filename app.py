@@ -137,9 +137,9 @@ def chat():
         # 检查文件内容是否过大，避免超出大模型的上下文限制
         file_content_preview = original_file_content
         if original_file_content and estimate_token_count:
-            # 获取配置的maxTokens并计算安全阈值（70%）
+            # 获取配置的maxTokens并计算安全阈值（50%）
             max_tokens = settings.get('maxTokens', 8196)
-            safe_threshold = int(max_tokens * 0.7)
+            safe_threshold = int(max_tokens * 0.5)
             
             # 估算文件内容的token数量
             file_token_count = estimate_token_count(original_file_content)
