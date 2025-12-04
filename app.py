@@ -129,10 +129,27 @@ def chat():
         
         user_message = data.get('message', '')
         original_file_content = data.get('file_content', '')  # 获取上传的原始文件内容
+        file_id = data.get('file_id')  # 获取文件ID（如果通过文件上传接口上传）
         chat_history = data.get('history', [])
         settings = data.get('settings', {})
         output_as_table = data.get('outputAsTable', False)
         step_by_step = data.get('stepByStep', False)  # 是否使用分步分析
+        
+        # 添加调试日志
+        app.logger.info(f'聊天请求中接收到 file_id: {file_id}')
+        app.logger.info(f'聊天请求中原始文件内容长度: {len(original_file_content)}')
+        app.logger.info(f'TEMP_FILE_STORAGE 中是否包含该文件ID: {file_id in TEMP_FILE_STORAGE if file_id else False}')
+        
+        # 如果提供了file_id，从服务器获取完整文件内容用于数据处理
+        full_file_content = original_file_content
+        if file_id and file_id in TEMP_FILE_STORAGE:
+            # 使用完整的原始文件进行处理以用于数据处理
+            temp_file_path, _ = TEMP_FILE_STORAGE[file_id]  # 获取文件路径，忽略时间戳
+            # 注意：此处使用完整文件进行处理，而不是再次采样
+            full_file_content = extract_full_text_from_file(temp_file_path, os.path.basename(temp_file_path))
+            app.logger.info(f'使用完整文件内容，长度: {len(full_file_content)}')
+        else:
+            app.logger.info(f'未使用完整文件内容，file_id存在: {file_id is not None}, file_id在TEMP_FILE_STORAGE中: {file_id in TEMP_FILE_STORAGE if file_id else False}')
         
         # 检查文件内容是否过大，避免超出大模型的上下文限制
         file_content_preview = original_file_content
@@ -173,11 +190,16 @@ def chat():
         else:
             compressed_chat_history = chat_history  # 如果函数不可用，使用原始历史记录
         
+        # 添加状态设置的调试日志
+        app.logger.info(f"设置初始状态 - file_content_preview 长度: {len(file_content_preview)}")
+        app.logger.info(f"设置初始状态 - full_file_content 长度: {len(full_file_content)}")
+        app.logger.info(f"设置初始状态 - 是否使用完整文件内容: {full_file_content != file_content_preview}")
+        
         # 准备初始状态
         initial_state: AnalysisState = {
             "user_message": user_message,
-            "file_content": file_content_preview,  # 使用截断的预览内容
-            "original_file_content": original_file_content,  # 保存完整的原始文件内容用于数据处理
+            "file_content": file_content_preview,  # 使用截断的预览内容用于任务规划
+            "original_file_content": full_file_content,  # 使用完整文件内容（如果有file_id）用于数据处理
             "chat_history": compressed_chat_history,
             "settings": settings,
             "output_as_table": output_as_table,
@@ -433,19 +455,33 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def extract_text_from_file(filepath, filename):
+def extract_text_from_file(filepath, filename, sample=True):
     """从文件中提取文本内容"""
     file_extension = filename.rsplit('.', 1)[1].lower()
     
     if file_extension == 'txt':
         with open(filepath, 'r', encoding='utf-8') as file:
             return file.read()
-    elif file_extension in ['csv']:
+    elif file_extension == 'csv':
         import pandas as pd
         df = pd.read_csv(filepath)
-        # 使用管道符分隔以确保后续处理的一致性
-        return df.to_csv(sep='|', index=False)
-    elif file_extension in ['xlsx']:
+        
+        if sample:
+            # 智能采样：保留所有列名，随机采样最多100行数据
+            if len(df) > 100:
+                sampled_df = df.sample(n=100, random_state=42)  # 固定随机种子确保一致性
+                # 确保原始表头也在采样中，如果不在则添加
+                if not df.head(1).equals(sampled_df.head(1)):
+                    sampled_df = pd.concat([df.head(1), sampled_df]).drop_duplicates()
+            else:
+                sampled_df = df
+            
+            # 使用管道符分隔以确保后续处理的一致性
+            return sampled_df.to_csv(sep='|', index=False)
+        else:
+            # 不采样，返回完整数据
+            return df.to_csv(sep='|', index=False)
+    elif file_extension == 'xlsx':
         import pandas as pd
         # 读取所有工作表
         all_sheets = pd.read_excel(filepath, sheet_name=None)
@@ -453,8 +489,22 @@ def extract_text_from_file(filepath, filename):
         sheet_strings = []
         for sheet_name, df in all_sheets.items():
             sheet_strings.append(f"Sheet: {sheet_name}")
+            
+            if sample:
+                # 对每个工作表进行智能采样：保留所有列名，随机采样最多100行数据
+                if len(df) > 100:
+                    sampled_df = df.sample(n=100, random_state=42)  # 固定随机种子确保一致性
+                    # 确保原始表头也在采样中，如果不在则添加
+                    if not df.head(1).equals(sampled_df.head(1)):
+                        sampled_df = pd.concat([df.head(1), sampled_df]).drop_duplicates()
+                else:
+                    sampled_df = df
+            else:
+                # 不采样，使用完整数据
+                sampled_df = df
+                
             # 使用管道符分隔以确保后续处理的一致性
-            sheet_strings.append(df.to_csv(sep='|', index=False))
+            sheet_strings.append(sampled_df.to_csv(sep='|', index=False))
             sheet_strings.append("")  # 添加空行分隔
         return "\n".join(sheet_strings)
     elif file_extension == 'docx':
@@ -464,9 +514,46 @@ def extract_text_from_file(filepath, filename):
         for paragraph in doc.paragraphs:
             full_text.append(paragraph.text)
         return '\n'.join(full_text)
-    else:
-        with open(filepath, 'r', encoding='utf-8') as file:
-            return file.read()
+
+
+def extract_full_text_from_file(filepath, filename):
+    """从文件中提取完整文本内容，不进行采样"""
+    return extract_text_from_file(filepath, filename, sample=False)
+
+import threading
+import time
+from datetime import datetime, timedelta
+
+# 用于存储上传文件的临时路径 {file_id: (file_path, timestamp)}
+TEMP_FILE_STORAGE = {}
+
+def cleanup_temp_files():
+    """定期清理过期的临时文件"""
+    global TEMP_FILE_STORAGE
+    while True:
+        current_time = datetime.now()
+        expired_files = []
+        
+        # 查找过期的文件
+        for file_id, (file_path, timestamp) in TEMP_FILE_STORAGE.items():
+            if current_time - timestamp > timedelta(hours=1):  # 1小时后过期
+                expired_files.append((file_id, file_path))
+        
+        # 删除过期文件
+        for file_id, file_path in expired_files:
+            try:
+                os.unlink(file_path)
+                app.logger.info(f'已删除过期临时文件: {file_path}')
+            except Exception as e:
+                app.logger.error(f'删除临时文件失败 {file_path}: {e}')
+            finally:
+                TEMP_FILE_STORAGE.pop(file_id, None)
+        
+        time.sleep(600)  # 每10分钟检查一次
+
+# 启动清理线程
+cleanup_thread = threading.Thread(target=cleanup_temp_files, daemon=True)
+cleanup_thread.start()
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
@@ -493,26 +580,42 @@ def upload_file():
                 app.logger.debug(f'文件已保存到临时位置: {temp_filename}')
             
             try:
-                # 从文件中提取文本内容
-                file_content = extract_text_from_file(temp_filename, file.filename)
-                app.logger.debug(f'文件内容提取成功，长度: {len(file_content)} 字符')
+                # 对文件进行智能采样，用于任务规划
+                preview_content = extract_text_from_file(temp_filename, file.filename)
                 
-                # 返回文件内容，以便前端可以将其发送给AI
+                # 生成一个唯一的文件ID来引用完整文件
+                import uuid
+                file_id = str(uuid.uuid4())
+                
+                # 将完整文件路径和时间戳存储在服务器端
+                TEMP_FILE_STORAGE[file_id] = (temp_filename, datetime.now())
+                
+                app.logger.debug(f'文件内容提取成功，预览长度: {len(preview_content)} 字符，文件ID: {file_id}')
+                
+                # 返回采样内容用于任务规划，以及文件ID用于后续完整内容访问
                 response_data = {
                     'status': 'success',
                     'message': '文件上传成功',
-                    'file_content': file_content,
+                    'file_content': preview_content,  # 用于任务规划的采样内容
+                    'file_id': file_id,  # 用于访问完整原始文件的ID
                     'filename': file.filename
                 }
                 app.logger.debug(f'返回响应数据: {response_data}')
                 return jsonify(response_data)
-            finally:
-                # 删除临时文件
-                os.unlink(temp_filename)
-                app.logger.debug(f'临时文件已删除: {temp_filename}')
+            except Exception as e:
+                # 如果处理失败，确保临时文件被清理
+                try:
+                    os.unlink(temp_filename)
+                    app.logger.debug(f'处理失败，临时文件已删除: {temp_filename}')
+                except:
+                    pass
+                raise e
         else:
             app.logger.warning(f'不支持的文件类型: {file.filename}')
             return jsonify({'error': '不支持的文件类型'}), 400
+    except UnicodeDecodeError as e:
+        app.logger.error(f"文件编码错误: {e}")
+        return jsonify({'error': f'文件编码错误，无法读取: {str(e)}'}), 500
     except Exception as e:
         app.logger.error(f"处理文件上传时出错: {e}")
         return jsonify({'error': f'处理文件上传时出错: {str(e)}'}), 500

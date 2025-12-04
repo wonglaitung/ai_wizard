@@ -1,44 +1,380 @@
 // 获取DOM元素 - 只有在元素存在的情况下才获取
-const chatTrigger = document.getElementById('chat-trigger');
-const chatContainer = document.getElementById('chat-container');
-const closeChat = document.getElementById('close-chat');
-const clearChat = document.getElementById('clear-chat');
-const userInput = document.getElementById('user-input');
-const sendBtn = document.getElementById('send-btn');
-const chatMessages = document.getElementById('chat-messages');
-const presetButtons = document.querySelectorAll('.preset-btn');
-const outputToggle = document.getElementById('output-toggle');
-const pageOutput = document.getElementById('page-output');
-const outputMessages = document.getElementById('output-messages');
-const menuItems = document.querySelectorAll('.menu-item');
-const pages = document.querySelectorAll('.page');
-const toggleSidebarBtn = document.getElementById('toggle-sidebar');
-const sidebar = document.querySelector('.sidebar');
-const contentArea = document.querySelector('.content-area');
-const fileUploadInput = document.getElementById('file-upload');
-const fileNameSpan = document.getElementById('file-name');
-const clearFileBtn = document.getElementById('clear-file');
-
-
+let chatTrigger, chatContainer, closeChat, clearChat, userInput, sendBtn, chatMessages, presetButtons, outputToggle, pageOutput, outputMessages, menuItems, pages, toggleSidebarBtn, sidebar, contentArea, fileUploadInput, fileNameSpan, clearFileBtn;
 
 // 配置页面相关元素
-const apiKeyInput = document.getElementById('api-key');
-const toggleApiKeyBtn = document.getElementById('toggle-api-key');
-const baseUrlInput = document.getElementById('base-url');
-const modelNameInput = document.getElementById('model-name');
-const temperatureInput = document.getElementById('temperature');
-const temperatureValue = document.getElementById('temperature-value');
-const maxTokensInput = document.getElementById('max-tokens');
-const topPInput = document.getElementById('top-p');
-const topPValue = document.getElementById('top-p-value');
-const frequencyPenaltyInput = document.getElementById('frequency-penalty');
-const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
-const saveConfigBtn = document.getElementById('save-config');
-const resetConfigBtn = document.getElementById('reset-config');
+let apiKeyInput, toggleApiKeyBtn, baseUrlInput, modelNameInput, temperatureInput, temperatureValue, maxTokensInput, topPInput, topPValue, frequencyPenaltyInput, frequencyPenaltyValue, saveConfigBtn, resetConfigBtn;
 
-// 聊天历史记录
-let chatHistory = [];
+// 全局变量
+let pendingMessage = null; // 用于存储排队的消息
+let uploadedFileId = ''; // 用于存储上传文件的ID
+let chatHistory = []; // 聊天历史记录
 let uploadedFileContent = ''; // 存储上传的文件内容
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM内容加载完成');
+    chatTrigger = document.getElementById('chat-trigger');
+    chatContainer = document.getElementById('chat-container');
+    closeChat = document.getElementById('close-chat');
+    clearChat = document.getElementById('clear-chat');
+    userInput = document.getElementById('user-input');
+    sendBtn = document.getElementById('send-btn');
+    chatMessages = document.getElementById('chat-messages');
+    presetButtons = document.querySelectorAll('.preset-btn');
+    outputToggle = document.getElementById('output-toggle');
+    pageOutput = document.getElementById('page-output');
+    outputMessages = document.getElementById('output-messages');
+    menuItems = document.querySelectorAll('.menu-item');
+    pages = document.querySelectorAll('.page');
+    toggleSidebarBtn = document.getElementById('toggle-sidebar');
+    sidebar = document.querySelector('.sidebar');
+    contentArea = document.querySelector('.content-area');
+    fileUploadInput = document.getElementById('file-upload');
+    fileNameSpan = document.getElementById('file-name');
+    clearFileBtn = document.getElementById('clear-file');
+    
+    // 配置页面相关元素
+    apiKeyInput = document.getElementById('api-key');
+    toggleApiKeyBtn = document.getElementById('toggle-api-key');
+    baseUrlInput = document.getElementById('base-url');
+    modelNameInput = document.getElementById('model-name');
+    temperatureInput = document.getElementById('temperature');
+    temperatureValue = document.getElementById('temperature-value');
+    maxTokensInput = document.getElementById('max-tokens');
+    topPInput = document.getElementById('top-p');
+    topPValue = document.getElementById('top-p-value');
+    frequencyPenaltyInput = document.getElementById('frequency-penalty');
+    frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+    saveConfigBtn = document.getElementById('save-config');
+    resetConfigBtn = document.getElementById('reset-config');
+    
+    console.log('获取到的元素:', {userInput, sendBtn, apiKeyInput, saveConfigBtn});
+    
+    // 初始化清除按钮状态
+    if (clearFileBtn) {
+        clearFileBtn.style.display = 'none';
+    }
+
+    // 菜单收起功能
+    if (toggleSidebarBtn) {
+        toggleSidebarBtn.addEventListener('click', () => {
+            if (sidebar && contentArea) {
+                sidebar.classList.toggle('collapsed');
+                contentArea.classList.toggle('sidebar-collapsed');
+                
+                // 更新按钮图标
+                if (sidebar.classList.contains('collapsed')) {
+                    toggleSidebarBtn.textContent = '▶';
+                } else {
+                    toggleSidebarBtn.textContent = '◀';
+                }
+                
+                // 调整图表输出区域的位置
+                adjustPageOutputPosition();
+            }
+        });
+    }
+
+    // 文件上传处理
+    if (fileUploadInput && fileNameSpan && clearFileBtn) {
+        fileUploadInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                // 显示上传图标
+                fileNameSpan.innerHTML = `<span class="upload-icon">📤</span> ${file.name}`;
+                // 显示清除按钮
+                clearFileBtn.style.display = 'block';
+                
+                // 创建FormData对象用于上传文件
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    // 上传文件到服务器
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.status === 'success') {
+                        // 保存文件内容和文件ID
+                        uploadedFileContent = result.file_content;
+                        uploadedFileId = result.file_id; // 保存文件ID用于后续数据处理
+                        
+                        // 检查文件内容的token数量
+                        const tokenCount = estimateTokenCount(result.file_content);
+                        // 从配置中获取最大Token数
+                        const savedSettings = localStorage.getItem('aiSettings');
+                        let maxTokens = 8196; // 默认值
+                        if (savedSettings) {
+                            const settings = JSON.parse(savedSettings);
+                            maxTokens = settings.maxTokens || 8196;
+                        }
+                        
+                        if (tokenCount > maxTokens) {
+                            // 显示警告信息
+                            fileNameSpan.innerHTML = `<span style="color: #ff6b35; font-weight: bold;">⚠️ ${file.name} (约${tokenCount} tokens - 可能超出限制)</span>`;
+                            // 添加一个提示信息
+                            alert(`文件 "${file.name}" 的内容可能超出最大Token限制（约${tokenCount} tokens，最大限制为${maxTokens}）。向大模型发送时可能失败。`);
+                        } else {
+                            fileNameSpan.textContent = file.name; // 上传成功后显示文件名
+                        }
+                        
+                        // 自动打开图表输出开关
+                        if (outputToggle && !outputToggle.checked) {
+                            outputToggle.checked = true;
+                            // 触发change事件以确保UI更新
+                            outputToggle.dispatchEvent(new Event('change'));
+                        }
+                        
+                        console.log('文件上传成功，file_id:', uploadedFileId);
+                        
+                        // 如果有排队的消息，现在发送它
+                        if (pendingMessage) {
+                            console.log('处理排队的消息:', pendingMessage);
+                            const messageToProcess = pendingMessage;
+                            pendingMessage = null; // 清空排队的消息
+                            
+                            // 显示用户消息并调用AI接口
+                            displayMessage(messageToProcess, 'user');
+                            
+                            // 调用AI接口获取回复
+                            getAIResponse(messageToProcess);
+                        }
+                    } else {
+                        console.error(`文件上传失败: ${result.error || '未知错误'}`);
+                        uploadedFileContent = '';
+                        uploadedFileId = ''; // 清空文件ID
+                        fileNameSpan.textContent = '文件上传失败';
+                        clearFileBtn.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('文件上传错误:', error);
+                    uploadedFileContent = '';
+                    fileNameSpan.textContent = '文件上传失败';
+                    clearFileBtn.style.display = 'none';
+                }
+            } else {
+                fileNameSpan.textContent = '未选择文件';
+                uploadedFileContent = '';
+                clearFileBtn.style.display = 'none';
+            }
+        });
+    }
+
+    // 清除文件按钮处理
+    if (clearFileBtn && fileNameSpan) {
+        clearFileBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            // 重置文件输入
+            if (fileUploadInput) fileUploadInput.value = '';
+            // 重置文件名显示
+            fileNameSpan.textContent = '未选择文件';
+            // 清空上传的文件内容、文件ID和排队的消息
+            uploadedFileContent = '';
+            uploadedFileId = '';
+            pendingMessage = null;
+            // 隐藏清除按钮
+            clearFileBtn.style.display = 'none';
+        });
+    }
+
+    // 页面切换功能
+    if (menuItems && pages) {
+        menuItems.forEach(item => {
+            item.addEventListener('click', () => {
+                console.log('菜单项被点击:', item.getAttribute('data-page'));
+                
+                // 如果菜单是收起状态，点击菜单项时展开菜单
+                if (sidebar && sidebar.classList.contains('collapsed')) {
+                    sidebar.classList.remove('collapsed');
+                    contentArea.classList.remove('sidebar-collapsed');
+                    if (toggleSidebarBtn) toggleSidebarBtn.textContent = '◀';
+                    // 调整图表输出区域的位置
+                    adjustPageOutputPosition();
+                }
+                
+                // 移除所有菜单项的激活状态
+                menuItems.forEach(menuItem => menuItem.classList.remove('active'));
+                // 添加激活状态到当前菜单项
+                item.classList.add('active');
+                
+                // 隐藏所有页面
+                pages.forEach(page => page.classList.remove('active'));
+                
+                // 显示对应页面
+                const pageId = item.getAttribute('data-page') + '-page';
+                console.log('目标页面ID:', pageId);
+                const targetPage = document.getElementById(pageId);
+                if (targetPage) {
+                    console.log('找到目标页面:', targetPage);
+                    targetPage.classList.add('active');
+                    console.log('页面已激活:', targetPage.classList.contains('active'));
+                    
+                    // 如果是其他页面，确保显示图表输出区域的开关
+                    if (outputToggle) {
+                        // 不改变开关状态，让用户可以控制
+                    }
+                } else {
+                    console.log('未找到目标页面:', pageId);
+                }
+            });
+        });
+    }
+
+    // 切换对话框显示/隐藏
+    if (chatTrigger) {
+        chatTrigger.addEventListener('click', () => {
+            if (chatContainer) {
+                if (chatContainer.classList.contains('hidden')) {
+                    // 如果对话框是隐藏的，显示它
+                    chatContainer.classList.remove('hidden');
+                    if (userInput) userInput.focus(); // 自动聚焦到输入框
+                } else {
+                    // 如果对话框是显示的，隐藏它
+                    chatContainer.classList.add('hidden');
+                }
+            }
+        });
+    }
+
+    // 隐藏对话框
+    if (closeChat) {
+        closeChat.addEventListener('click', () => {
+            if (chatContainer) chatContainer.classList.add('hidden');
+        });
+    }
+
+    // 清除对话框内容事件
+    if (clearChat) {
+        clearChat.addEventListener('click', () => {
+            if (confirm('确定要清除所有对话内容吗？')) {
+                // 清除对话框中的内容
+                if (chatMessages) {
+                    chatMessages.innerHTML = '';
+                }
+                
+                // 如果图表输出区域是开启的，也清除图表输出区域的内容
+                if (outputMessages) {
+                    outputMessages.innerHTML = '';
+                }
+                
+                // 清除聊天历史记录
+                chatHistory = [];
+            }
+        });
+    }
+
+    // 开关切换事件
+    if (outputToggle) {
+        outputToggle.addEventListener('change', () => {
+            console.log('输出开关状态改变:', outputToggle.checked);
+            if (outputToggle.checked) {
+                if (pageOutput) pageOutput.classList.remove('hidden');
+                console.log('图表输出区域已显示');
+            } else {
+                if (pageOutput) pageOutput.classList.add('hidden');
+                console.log('图表输出区域已隐藏');
+            }
+        });
+    }
+
+    // 发送消息
+    if (sendBtn) {
+        console.log('绑定发送按钮事件');
+        sendBtn.addEventListener('click', () => {
+            console.log('发送按钮被点击');
+            sendMessage();
+        });
+    }
+    if (userInput) {
+        userInput.addEventListener('keypress', (e) => {
+            console.log('按键事件:', e.key);
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    }
+
+    // 预设问题按钮事件
+    if (presetButtons) {
+        presetButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const question = button.getAttribute('data-question');
+                
+                // 如果是"展示一个销售数据表格"，自动打开图表输出开关
+                if (question === "展示一个销售数据表格" && outputToggle && !outputToggle.checked) {
+                    outputToggle.checked = true;
+                    // 触发change事件以确保UI更新
+                    outputToggle.dispatchEvent(new Event('change'));
+                }
+                
+                // 显示用户消息
+                displayMessage(question, 'user');
+                // 调用AI接口获取回复
+                getAIResponse(question);
+            });
+        });
+    }
+    
+    // 加载保存的配置
+    loadConfig();
+    
+    // API密钥显示/隐藏切换
+    if (toggleApiKeyBtn && apiKeyInput) {
+        toggleApiKeyBtn.addEventListener('click', function() {
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                toggleApiKeyBtn.textContent = '🙈';
+            } else {
+                apiKeyInput.type = 'password';
+                toggleApiKeyBtn.textContent = '👁️';
+            }
+        });
+    }
+    
+    // 滑块值显示
+    if (temperatureInput && temperatureValue) {
+        temperatureInput.addEventListener('input', function() {
+            temperatureValue.textContent = this.value;
+        });
+    }
+    
+    if (topPInput && topPValue) {
+        topPInput.addEventListener('input', function() {
+            topPValue.textContent = this.value;
+        });
+    }
+    
+    if (frequencyPenaltyInput && frequencyPenaltyValue) {
+        frequencyPenaltyInput.addEventListener('input', function() {
+            frequencyPenaltyValue.textContent = this.value;
+        });
+    }
+    
+    // 保存配置
+    if (saveConfigBtn) {
+        saveConfigBtn.addEventListener('click', function() {
+            saveConfig();
+            alert('配置已保存！');
+        });
+    }
+    
+    // 重置配置
+    if (resetConfigBtn) {
+        resetConfigBtn.addEventListener('click', function() {
+            resetConfig();
+            alert('配置已重置为默认值！');
+        });
+    }
+    
+    // 为下载Word按钮添加事件监听器
+    const downloadWordBtn = document.getElementById('download-word');
+    if (downloadWordBtn) {
+        downloadWordBtn.addEventListener('click', exportToWord);
+    }
+});
 
 // 估算文本token数量的函数（改进版）
 function estimateTokenCount(text) {
@@ -72,159 +408,6 @@ function estimateTokenCount(text) {
     return Math.ceil(tokenCount);
 }
 
-// 初始化清除按钮状态
-if (clearFileBtn) {
-    clearFileBtn.style.display = 'none';
-}
-
-// 菜单收起功能
-toggleSidebarBtn.addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
-    contentArea.classList.toggle('sidebar-collapsed');
-    
-    // 更新按钮图标
-    if (sidebar.classList.contains('collapsed')) {
-        toggleSidebarBtn.textContent = '▶';
-    } else {
-        toggleSidebarBtn.textContent = '◀';
-    }
-    
-    // 调整图表输出区域的位置
-    adjustPageOutputPosition();
-});
-
-// 文件上传处理
-if (fileUploadInput && fileNameSpan && clearFileBtn) {
-    fileUploadInput.addEventListener('change', async (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            // 显示上传图标
-            fileNameSpan.innerHTML = `<span class="upload-icon">📤</span> ${file.name}`;
-            // 显示清除按钮
-            clearFileBtn.style.display = 'block';
-            
-            // 创建FormData对象用于上传文件
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            try {
-                // 上传文件到服务器
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok && result.status === 'success') {
-                    // 保存文件内容
-                    uploadedFileContent = result.file_content;
-                    
-                    // 检查文件内容的token数量
-                    const tokenCount = estimateTokenCount(result.file_content);
-                    // 从配置中获取最大Token数
-                    const savedSettings = localStorage.getItem('aiSettings');
-                    let maxTokens = 8196; // 默认值
-                    if (savedSettings) {
-                        const settings = JSON.parse(savedSettings);
-                        maxTokens = settings.maxTokens || 8196;
-                    }
-                    
-                    if (tokenCount > maxTokens) {
-                        // 显示警告信息
-                        fileNameSpan.innerHTML = `<span style="color: #ff6b35; font-weight: bold;">⚠️ ${file.name} (约${tokenCount} tokens - 可能超出限制)</span>`;
-                        // 添加一个提示信息
-                        alert(`文件 "${file.name}" 的内容可能超出最大Token限制（约${tokenCount} tokens，最大限制为${maxTokens}）。向大模型发送时可能失败。`);
-                    } else {
-                        fileNameSpan.textContent = file.name; // 上传成功后显示文件名
-                    }
-                    
-                    // 自动打开图表输出开关
-                    if (outputToggle && !outputToggle.checked) {
-                        outputToggle.checked = true;
-                        // 触发change事件以确保UI更新
-                        outputToggle.dispatchEvent(new Event('change'));
-                    }
-                } else {
-                    console.error(`文件上传失败: ${result.error || '未知错误'}`);
-                    uploadedFileContent = '';
-                    fileNameSpan.textContent = '文件上传失败';
-                    clearFileBtn.style.display = 'none';
-                }
-            } catch (error) {
-                console.error('文件上传错误:', error);
-                uploadedFileContent = '';
-                fileNameSpan.textContent = '文件上传失败';
-                clearFileBtn.style.display = 'none';
-            }
-        } else {
-            fileNameSpan.textContent = '未选择文件';
-            uploadedFileContent = '';
-            clearFileBtn.style.display = 'none';
-        }
-    });
-}
-
-// 清除文件按钮处理
-if (clearFileBtn && fileNameSpan) {
-    clearFileBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        // 重置文件输入
-        fileUploadInput.value = '';
-        // 重置文件名显示
-        fileNameSpan.textContent = '未选择文件';
-        // 清空上传的文件内容
-        uploadedFileContent = '';
-        // 隐藏清除按钮
-        clearFileBtn.style.display = 'none';
-    });
-}
-
-// 页面切换功能
-if (menuItems && pages) {
-    menuItems.forEach(item => {
-        item.addEventListener('click', () => {
-            console.log('菜单项被点击:', item.getAttribute('data-page'));
-            
-            // 如果菜单是收起状态，点击菜单项时展开菜单
-            if (sidebar && sidebar.classList.contains('collapsed')) {
-                sidebar.classList.remove('collapsed');
-                contentArea.classList.remove('sidebar-collapsed');
-                toggleSidebarBtn.textContent = '◀';
-                // 调整图表输出区域的位置
-                adjustPageOutputPosition();
-            }
-            
-            // 移除所有菜单项的激活状态
-            menuItems.forEach(menuItem => menuItem.classList.remove('active'));
-            // 添加激活状态到当前菜单项
-            item.classList.add('active');
-            
-            // 隐藏所有页面
-            pages.forEach(page => page.classList.remove('active'));
-            
-            // 显示对应页面
-            const pageId = item.getAttribute('data-page') + '-page';
-            console.log('目标页面ID:', pageId);
-            const targetPage = document.getElementById(pageId);
-            if (targetPage) {
-                console.log('找到目标页面:', targetPage);
-                targetPage.classList.add('active');
-                console.log('页面已激活:', targetPage.classList.contains('active'));
-                
-                // 如果是其他页面，确保显示图表输出区域的开关
-                if (outputToggle) {
-                    // 不改变开关状态，让用户可以控制
-                }
-            } else {
-                console.log('未找到目标页面:', pageId);
-            }
-        });
-    });
-}
-
-
-
 // 调整图表输出区域位置的函数
 function adjustPageOutputPosition() {
     if (pageOutput) {
@@ -249,82 +432,6 @@ function adjustPageOutputPosition() {
         }
     }
 }
-
-// 切换对话框显示/隐藏
-chatTrigger.addEventListener('click', () => {
-    if (chatContainer.classList.contains('hidden')) {
-        // 如果对话框是隐藏的，显示它
-        chatContainer.classList.remove('hidden');
-        userInput.focus(); // 自动聚焦到输入框
-    } else {
-        // 如果对话框是显示的，隐藏它
-        chatContainer.classList.add('hidden');
-    }
-});
-
-// 隐藏对话框
-closeChat.addEventListener('click', () => {
-    chatContainer.classList.add('hidden');
-});
-
-// 清除对话框内容事件
-if (clearChat) {
-    clearChat.addEventListener('click', () => {
-        if (confirm('确定要清除所有对话内容吗？')) {
-            // 清除对话框中的内容
-            if (chatMessages) {
-                chatMessages.innerHTML = '';
-            }
-            
-            // 如果图表输出区域是开启的，也清除图表输出区域的内容
-            if (outputMessages) {
-                outputMessages.innerHTML = '';
-            }
-            
-            // 清除聊天历史记录
-            chatHistory = [];
-        }
-    });
-}
-
-// 开关切换事件
-outputToggle.addEventListener('change', () => {
-    console.log('输出开关状态改变:', outputToggle.checked);
-    if (outputToggle.checked) {
-        pageOutput.classList.remove('hidden');
-        console.log('图表输出区域已显示');
-    } else {
-        pageOutput.classList.add('hidden');
-        console.log('图表输出区域已隐藏');
-    }
-});
-
-// 发送消息
-sendBtn.addEventListener('click', sendMessage);
-userInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        sendMessage();
-    }
-});
-
-// 预设问题按钮事件
-presetButtons.forEach(button => {
-    button.addEventListener('click', () => {
-        const question = button.getAttribute('data-question');
-        
-        // 如果是"展示一个销售数据表格"，自动打开图表输出开关
-        if (question === "展示一个销售数据表格" && outputToggle && !outputToggle.checked) {
-            outputToggle.checked = true;
-            // 触发change事件以确保UI更新
-            outputToggle.dispatchEvent(new Event('change'));
-        }
-        
-        // 显示用户消息
-        displayMessage(question, 'user');
-        // 调用AI接口获取回复
-        getAIResponse(question);
-    });
-});
 
 // 发送消息函数
 function sendMessage() {
@@ -453,6 +560,7 @@ async function getAIResponse(userMessage) {
             body: JSON.stringify({ 
                 message: userMessage,
                 file_content: uploadedFileContent, // 添加上传的文件内容
+                file_id: uploadedFileId, // 添加文件ID用于获取完整文件内容
                 history: chatHistory,
                 settings: settings,
                 outputAsTable: shouldOutputAsTable,
@@ -1110,59 +1218,7 @@ function hideFunnelIndicator() {
     }
 }
 
-// 配置页面功能
-document.addEventListener('DOMContentLoaded', function() {
-    // 加载保存的配置
-    loadConfig();
-    
-    // API密钥显示/隐藏切换
-    if (toggleApiKeyBtn && apiKeyInput) {
-        toggleApiKeyBtn.addEventListener('click', function() {
-            if (apiKeyInput.type === 'password') {
-                apiKeyInput.type = 'text';
-                toggleApiKeyBtn.textContent = '🙈';
-            } else {
-                apiKeyInput.type = 'password';
-                toggleApiKeyBtn.textContent = '👁️';
-            }
-        });
-    }
-    
-    // 滑块值显示
-    if (temperatureInput && temperatureValue) {
-        temperatureInput.addEventListener('input', function() {
-            temperatureValue.textContent = this.value;
-        });
-    }
-    
-    if (topPInput && topPValue) {
-        topPInput.addEventListener('input', function() {
-            topPValue.textContent = this.value;
-        });
-    }
-    
-    if (frequencyPenaltyInput && frequencyPenaltyValue) {
-        frequencyPenaltyInput.addEventListener('input', function() {
-            frequencyPenaltyValue.textContent = this.value;
-        });
-    }
-    
-    // 保存配置
-    if (saveConfigBtn) {
-        saveConfigBtn.addEventListener('click', function() {
-            saveConfig();
-            alert('配置已保存！');
-        });
-    }
-    
-    // 重置配置
-    if (resetConfigBtn) {
-        resetConfigBtn.addEventListener('click', function() {
-            resetConfig();
-            alert('配置已重置为默认值！');
-        });
-    }
-});
+
 
 // 加载配置
 function loadConfig() {
@@ -1402,10 +1458,4 @@ function exportToWord() {
     document.body.removeChild(link);
 }
 
-// 为下载Word按钮添加事件监听器
-document.addEventListener('DOMContentLoaded', function() {
-    const downloadWordBtn = document.getElementById('download-word');
-    if (downloadWordBtn) {
-        downloadWordBtn.addEventListener('click', exportToWord);
-    }
-});
+
