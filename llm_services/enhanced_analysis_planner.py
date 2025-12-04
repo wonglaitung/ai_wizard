@@ -148,52 +148,83 @@ class EnhancedAnalysisPlanner:
                                 break
         
         # 构建提示词，包含智能初始规划和历史学习
-        prompt = f"""
-你是一个业务数据分析专家。你的任务是将用户的请求转换为具体的计算任务，帮助用户从业务角度透视数据。
+        prompt = f"""你是一个业务数据分析专家。你的任务是将用户的请求转换为具体的计算任务，帮助用户从业务角度透视数据。
 
 用户请求: {user_request}
 
-文件内容:\n{file_content if file_content else "无文件内容"}
+文件内容:
+{file_content if file_content else "无文件内容"}
 
 可用列名: {actual_columns}
 
-历史规划记录（用于学习和改进）:\n{learning_context if learning_context else "无历史规划记录"}
+历史规划记录（用于学习和改进）:
+{learning_context if learning_context else "无历史规划记录"}
 
-系统支持以下操作（用于业务数据透视）:\n{operations_info}
+系统支持以下操作（用于业务数据透视）:
+{operations_info}
 
-请按照以下格式输出JSON响应，包含以下字段：
-1. "task_type": 任务类型（如：业务指标分析、业务趋势分析、业务构成分析、业务关联分析、业务诊断等）
-2. "columns": 需要分析的列名列表
-3. "operations": 需要执行的操作列表，操作名称必须从系统支持的操作中选择
-4. "expected_output": 预期的输出结果描述（从业务角度解释）
-5. "rationale": 规划的推理过程，解释为什么选择这些操作
+IMPORTANT: 请严格按照以下JSON格式输出，仅输出JSON内容，不要包含任何其他内容（如解释、注释或标记）：
+{{
+    "task_type": "任务类型（如：业务指标分析、业务趋势分析、业务构成分析、业务关联分析、业务诊断等）",
+    "columns": ["需要分析的列名列表"],
+    "operations": [
+        {{
+            "name": "操作名称",
+            "column": "操作针对的列名或列名列表",
+            "description": "操作的描述"
+        }}
+    ],
+    "expected_output": "预期的输出结果描述（从业务角度解释）",
+    "rationale": "规划的推理过程，解释为什么选择这些操作"
+}}
 
-示例输出格式：\n{{\n    "task_type": "数据分析",
+示例输出格式：
+{{
+    "task_type": "数据分析",
     "columns": ["数值列1", "分类列1"],
-    "operations": [\n        {{"name": "sum", "column": "数值列1", "description": "计算指定列的总和"}},\n        {{"name": "mean", "column": "数值列1", "description": "计算指定列的平均值"}},\n        {{"name": "max", "column": "数值列1", "description": "找出指定列的最大值"}}\n    ],
+    "operations": [
+        {{"name": "sum", "column": "数值列1", "description": "计算指定列的总和"}},
+        {{"name": "mean", "column": "数值列1", "description": "计算指定列的平均值"}},
+        {{"name": "max", "column": "数值列1", "description": "找出指定列的最大值"}}
+    ],
     "expected_output": "输出指定列的总和、平均值和最大值",
     "rationale": "基于用户请求和数据特征，选择适当的统计操作"
 }}
 
-对于多维度交叉分析，请使用以下格式：\n{{\n    "task_type": "多维度交叉分析",
+对于多维度交叉分析，示例格式：
+{{
+    "task_type": "多维度交叉分析",
     "columns": ["分类列1", "分类列2", "数值列1"],
-    "operations": [\n        {{"name": "group_by", "column": ["分类列1", "分类列2"], "description": "按指定的分类列进行分组统计"}},\n        {{"name": "pivot_table", "column": {{"index": "分类列1", "columns": "分类列2", "values": "数值列1", "aggfunc": "sum"}}, "description": "创建透视表进行多维度汇总分析"}},\n        {{"name": "cross_tab", "column": ["分类列1", "分类列2"], "description": "创建交叉表分析两个分类变量之间的关系"}}\n    ],
+    "operations": [
+        {{"name": "group_by", "column": ["分类列1", "分类列2"], "description": "按指定的分类列进行分组统计"}},
+        {{"name": "pivot_table", "column": {{"index": "分类列1", "columns": "分类列2", "values": "数值列1", "aggfunc": "sum"}}, "description": "创建透视表进行多维度汇总分析"}},
+        {{"name": "cross_tab", "column": ["分类列1", "分类列2"], "description": "创建交叉表分析两个分类变量之间的关系"}}
+    ],
     "expected_output": "输出多维度的分组统计结果",
     "rationale": "基于多维度分析需求，使用分组、透视表和交叉表来展示不同维度下的数据特征"
 }}
 
-对于多工作表数据的交叉分析，请使用以下格式：\n{{\n    "task_type": "多工作表数据分析",
+对于多工作表数据的交叉分析，示例格式：
+{{
+    "task_type": "多工作表数据分析",
     "columns": ["工作表1数据列", "工作表2数据列", "分类列"],
-    "operations": [\n        {{"name": "group_by", "column": ["分类列"], "description": "按分类列分组进行统计"}},\n        {{"name": "cross_tab", "column": ["工作表1数据列", "工作表2数据列"], "description": "创建交叉表分析两个工作表间数据的关系"}},\n        {{"name": "count", "column": "工作表1数据列", "description": "计算工作表1的数据总数"}},\n        {{"name": "count", "column": "工作表2数据列", "description": "计算工作表2的数据总数"}}\n    ],
+    "operations": [
+        {{"name": "group_by", "column": ["分类列"], "description": "按分类列分组进行统计"}},
+        {{"name": "cross_tab", "column": ["工作表1数据列", "工作表2数据列"], "description": "创建交叉表分析两个工作表间数据的关系"}},
+        {{"name": "count", "column": "工作表1数据列", "description": "计算工作表1的数据总数"}},
+        {{"name": "count", "column": "工作表2数据列", "description": "计算工作表2的数据总数"}}
+    ],
     "expected_output": "输出各工作表数据的对比分析结果",
     "rationale": "基于多工作表对比分析需求，使用分组统计和交叉表来展示不同工作表间的数据关系"
 }}
 
 重要提示：
-- 如果需要计算数量变化等衍生指标，需要先执行基础操作再进行计算
+- 严格按照上述JSON格式输出，仅输出JSON内容
+- 不要包含任何解释、注释或代码块标记（如```json或```）
+- 确保JSON格式完全正确，避免语法错误
+- 操作名称必须从系统支持的操作中选择
 - 避免使用不存在的列名
-
-请严格按照上述JSON格式输出，不要包含其他内容。
+- 如果需要计算数量变化等衍生指标，需要先执行基础操作再进行计算
 """
         
         try:
@@ -228,8 +259,23 @@ class EnhancedAnalysisPlanner:
                     task_plan[field] = "" if field in ["task_type", "expected_output", "rationale"] else [] if field in ["columns"] else []
             
             return task_plan
+        except json.JSONDecodeError as e:
+            logger.error(f"分析任务规划JSON解析出错: {str(e)}")
+            logger.error(f"原始LLM回复内容: {response}")
+            # 如果解析失败，返回默认任务计划
+            return {
+                "task_type": "基础分析",
+                "columns": [],
+                "operations": [],
+                "expected_output": "执行基础数据分析",
+                "rationale": "由于规划出错，使用基础分析任务",
+                "error": f"JSON解析错误: {str(e)}"
+            }
         except Exception as e:
             logger.error(f"分析任务规划出错: {str(e)}")
+            # 如果有response变量，也记录原始回复
+            if 'response' in locals():
+                logger.error(f"原始LLM回复内容: {response}")
             # 如果解析失败，返回默认任务计划
             return {
                 "task_type": "基础分析",
