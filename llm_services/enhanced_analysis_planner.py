@@ -1,12 +1,11 @@
 """
 改进的分析任务规划器模块
-包含缓存机制和智能初始规划系统，从之前的迭代中学习以减少重新规划周期
+移除缓存机制，简化智能初始规划系统
 """
 
 import json
 from typing import Dict, Any, List, Optional
 from .qwen_engine import chat_with_llm
-from .cache_manager import get_cache_manager
 import logging
 import os
 import re
@@ -15,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 class EnhancedAnalysisPlanner:
     """
-    增强的分析规划器，包含缓存和智能学习机制
+    增强的分析规划器，移除缓存机制
     """
     
     def __init__(self):
-        self.cache_manager = get_cache_manager()
+        pass
         self.operation_descriptions = {
             "mean": "计算数值列的平均值，用于了解业务指标的平均水平",
             "sum": "计算数值列的总和，用于了解业务指标的总体规模",
@@ -51,7 +50,7 @@ class EnhancedAnalysisPlanner:
     def plan_analysis_task(self, user_request: str, file_content: str = None, api_key: str = None,
                           plan_history: List[Dict] = None, settings: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        使用大模型规划数据分析任务，包含缓存和智能规划逻辑
+        使用大模型规划数据分析任务，移除缓存机制
         
         Args:
             user_request: 用户的分析请求
@@ -63,19 +62,8 @@ class EnhancedAnalysisPlanner:
         Returns:
             dict: 包含分析任务的详细信息
         """
-        # 尝试从缓存获取结果
-        cache_key = f"{user_request}_{file_content or ''}_analysis_plan"
-        task_plan = self.cache_manager.get(user_request, file_content or '', 'analysis_plan')
-        
-        if task_plan:
-            logger.info("从缓存获取分析计划")
-            return task_plan
-        
-        # 如果缓存未命中，执行规划
+        # 直接执行规划，不再使用缓存
         task_plan = self._generate_task_plan(user_request, file_content, api_key, plan_history, settings)
-        
-        # 将结果存入缓存
-        self.cache_manager.set(user_request, file_content or '', 'analysis_plan', task_plan)
         
         return task_plan
     
