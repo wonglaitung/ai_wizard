@@ -440,7 +440,9 @@ function sendMessage() {
         // 检查文件内容的token数（如果有的话）
         if (uploadedFileContent) {
             const fileTokenCount = estimateTokenCount(uploadedFileContent);
+            console.log('估算文件Token数:', fileTokenCount);
             const messageTokenCount = estimateTokenCount(message);
+            console.log('估算消息Token数:', messageTokenCount);
             const totalTokenCount = fileTokenCount + messageTokenCount;
             // 从配置中获取最大Token数
             const savedSettings = localStorage.getItem('aiSettings');
