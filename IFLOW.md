@@ -111,6 +111,22 @@
 58. **多维度交叉分析**：支持多维度数据透视分析，包括分组统计、交叉表和透视表的组合使用。
 59. **DataFrame操作智能转换**：自动将元组列选择转换为列表格式以避免pandas错误。
 60. **业务指标深度分析**：从商业角度提供更深入的业务指标分析。
+61. **临时文件存储机制**：实现服务器端临时文件存储和自动清理机制，支持完整原始文件内容的数据处理。
+62. **智能截断机制**：实现文件内容的智能截断机制，避免超出上下文限制。
+63. **智能采样机制**：实现CSV/XLSX文件的智能采样机制，保留所有列名并随机采样最多100行数据。
+64. **改进的文件上传API**：返回采样内容用于任务规划和文件ID用于访问完整原始内容。
+65. **自动清理机制**：实现临时文件自动清理机制，定期清理过期文件。
+66. **更智能的代码生成和执行错误处理**：提升系统稳定性。
+67. **改进的条件路由机制**：支持动态流程选择。
+68. **改进的重规划跳过机制**：基于质量阈值优化性能。
+69. **更智能的列名映射机制**：优化多工作表数据处理。
+70. **Word文档导出功能**：支持将图表输出区内容导出为Word文档。
+71. **漏斗图标显示功能**：显示处理过程中的进度指示。
+72. **改进的响应数据处理机制**：优化SSE流处理和数据展示。
+73. **文件上传预处理机制**：实现智能采样和token估算功能。
+74. **聊天历史压缩集成**：集成聊天历史压缩功能，支持token估算和压缩。
+75. **动态规划分析流程优化**：改进迭代控制和质量评估机制。
+76. **质量评估和迭代控制集成**：实现更智能的迭代控制和质量评估机制。
 
 ## 技术栈
 
@@ -259,6 +275,18 @@ Flask 应用的主文件，负责：
 - 改进文件上传API，返回采样内容用于任务规划和文件ID用于访问完整原始内容
 - 实现服务器端临时文件存储机制，支持完整原始文件内容的数据处理
 - 实现临时文件自动清理机制，定期清理过期文件
+- 实现上传文件的智能采样功能，保留所有列名并随机采样最多100行数据
+- 实现基于文件ID的完整文件内容访问机制
+- 实现聊天历史压缩功能的集成和调用
+- 实现动态规划分析流程的改进和优化
+- 实现质量评估和迭代控制机制的集成
+- 实现TEMP_FILE_STORAGE字典，用于存储上传文件的临时路径
+- 实现cleanup_temp_files函数，定期清理过期的临时文件
+- 实现cleanup_thread线程，后台自动清理过期文件
+- 实现extract_full_text_from_file函数，提取文件完整文本内容
+- 实现run_conditional_graph函数，使用条件图执行器运行适当的流程
+- 实现run_analysis_with_streaming函数，使用分析图并流式输出中间结果
+- 实现run_chat_with_streaming函数，使用聊天图并流式输出结果
 
 ### `langgraph_services/analysis_graph.py`
 
@@ -290,6 +318,18 @@ LangGraph状态定义和节点实现模块，负责：
 - 优化观察和评估节点的决策机制
 - 实现原始文件内容的完整处理路径（original_file_content字段）
 - 实现改进的条件路由图，支持动态路由决策
+- 实现迭代过程中的状态管理和控制
+- 实现质量评估和反馈机制的集成
+- 实现create_dynamic_analysis_graph函数，创建动态规划分析流程图
+- 实现create_simple_analysis_graph函数，创建简化的分析流程图
+- 实现create_analysis_graph函数，创建分析流程图（现在使用动态规划图作为默认）
+- 实现route_message函数，决定消息路由的函数
+- 实现create_chat_graph函数，创建聊天流程图
+- 实现create_conditional_graph函数，创建条件路由图
+- 实现run_full_analysis函数，运行完整的分析流程并返回中间结果
+- 实现get_analysis_graph函数，延迟初始化图实例以避免循环导入
+- 实现get_chat_graph函数，延迟初始化图实例以避免循环导入
+- 实现get_conditional_graph函数，延迟初始化图实例以避免循环导入
 
 ### `langgraph_services/node_handlers.py`
 
@@ -319,6 +359,15 @@ LangGraph状态定义和节点实现模块，负责：
 - 改进错误处理机制，支持更丰富的错误类型和修复策略
 - 实现原始文件内容的完整处理（优先使用original_file_content）
 - 实现改进的重规划跳过机制，基于质量阈值决定是否跳过重规划
+- 实现改进的条件路由逻辑，支持动态流程选择
+- 实现更智能的代码生成和执行错误处理机制
+- 实现plan_analysis_task_node函数，任务规划节点
+- 实现process_data_node函数，数据处理节点
+- 实现observe_and_evaluate_node函数，观察和评估节点
+- 实现generate_report_node函数，报告生成节点
+- 实现chat_node函数，聊天节点
+- 实现replan_analysis_task_node函数，改进的重规划节点
+- 实现build_detailed_replan_request函数，构建详细的重规划请求
 
 ### `llm_services/enhanced_analysis_planner.py`
 
@@ -348,6 +397,13 @@ LangGraph状态定义和节点实现模块，负责：
 - 改进多工作表分析任务的规划逻辑
 - 实现改进的智能学习机制，从历史规划中提取改进策略
 - 实现更详细的规划上下文格式化
+- 实现完全依赖大模型在线生成规划的机制
+- 实现智能初始规划系统，避免缓存机制的复杂性
+- 实现plan_analysis_task函数，使用增强的分析规划器规划数据分析任务
+- 实现EnhancedAnalysisPlanner类，包含_operation_descriptions和_supported_operations属性
+- 实现plan_analysis_task方法，使用大模型规划数据分析任务
+- 实现_format_learning_context方法，格式化历史规划上下文
+- 实现_parse_file_content方法，解析文件内容以获取实际列名
 
 ### `llm_services/observer_evaluator.py`
 
@@ -373,8 +429,9 @@ LangGraph状态定义和节点实现模块，负责：
 - 优化评估提示词，提高评估准确性
 - 增强业务洞察分析的评估维度
 - 实现改进的质量评估逻辑，考虑业务价值和实际应用
-
-
+- 实现更智能的重新规划决策机制
+- 实现evaluate_analysis_results函数，评估数据分析结果的质量
+- 实现should_replan_analysis函数，根据观察结果决定是否需要重新规划
 
 ### `llm_services/chat_history_compressor.py`
 
@@ -440,6 +497,14 @@ LangGraph状态定义和节点实现模块，负责：
 - 优化pandas和numpy对象的序列化过程
 - 实现改进的跨工作表操作处理逻辑
 - 实现更智能的代码生成和执行错误处理机制
+- 实现execute_generated_code函数，直接执行大模型生成的代码
+- 实现_cleanup_generated_code函数，清理大模型生成的代码
+- 实现_fix_dataframe_column_access函数，修复pandas DataFrame中元组用于多列选择的问题
+- 实现_parse_multi_sheet_data函数，解析包含多工作表的文本数据
+- 实现_convert_pandas_types函数，将pandas和numpy数据类型转换为Python原生类型以支持JSON序列化
+- 实现_handle_cross_sheet_operations函数，处理跨工作表操作，如客户留存分析等
+- 实现_process_data函数，根据任务计划执行数据处理
+- 实现_has_assignment函数，检查代码中是否包含赋值语句
 
 ### `llm_services/qwen_engine.py`
 
@@ -469,6 +534,17 @@ Qwen 模型的接口文件，包含：
 - 实现更完善的HTTP错误处理和日志记录
 - 实现改进的参数验证和限制机制
 - 实现更好的API密钥和URL管理
+- 实现改进的错误处理和响应解析机制
+- 实现_validate_and_limit_params函数，验证并限制参数值在API允许范围内
+- 实现_prepare_messages函数，准备消息列表，包含历史记录和当前查询
+- 实现_validate_api_key函数，检查API密钥是否设置
+- 实现_get_base_url函数，获取基础URL
+- 实现_create_headers函数，创建请求头
+- 实现_ensure_utf8_encoding函数，确保查询文本是 UTF-8 编码
+- 实现_handle_error函数，统一的错误处理
+- 实现_handle_http_error函数，统一的HTTP错误处理
+- 实现_prepare_payload函数，准备请求载荷
+- 实现_process_streaming_response函数，处理流式响应
 
 ### `llm_services/report_generator.py`
 
@@ -491,6 +567,8 @@ Qwen 模型的接口文件，包含：
 - 增强业务洞察分析的专业性
 - 改进表格格式输出的结构和内容
 - 实现改进的报告生成逻辑，使用settings参数进行模型配置
+- 实现更专业的业务数据透视和洞察分析报告生成
+- 实现generate_report函数，生成业务数据透视分析报告
 
 ### `main.html`
 
@@ -512,6 +590,7 @@ Qwen 模型的接口文件，包含：
 - 优化跨工作表数据分析结果的展示
 - 增强多维数据透视结果的可视化展示
 - 实现改进的用户界面和交互体验
+- 支持Word文档导出功能
 
 ### `css/styles.css`
 
@@ -540,6 +619,7 @@ Qwen 模型的接口文件，包含：
 - 优化跨工作表分析结果的展示样式
 - 改进多维数据透视结果的视觉呈现
 - 实现改进的用户界面样式和视觉效果
+- 支持Word导出按钮的样式
 
 ### `scripts/script.js`
 
@@ -586,6 +666,28 @@ Qwen 模型的接口文件，包含：
 - 优化多工作表数据的前端处理
 - 增强多维数据透视结果的可视化
 - 实现改进的响应数据处理和错误处理
+- 实现Word文档导出功能
+- 实现漏斗图标显示和隐藏功能
+- 实现更智能的响应数据处理机制
+- 实现改进的文件上传和处理流程
+- 实现DOM元素获取和初始化
+- 实现adjustPageOutputPosition函数，调整图表输出区域位置
+- 实现sendMessage函数，发送消息
+- 实现displayMessage函数，显示消息
+- 实现getAIResponse函数，获取AI回复
+- 实现checkAndRenderChart函数，检查是否包含表格并渲染图表
+- 实现parseTableData函数，解析表格数据
+- 实现hslToHex函数，将HSL颜色转换为十六进制
+- 实现hexToRgba函数，将十六进制颜色转换为RGBA
+- 实现exportChartAsImage函数，导出图表为图片
+- 实现renderChart函数，渲染图表
+- 实现displayTypingIndicator函数，显示"正在输入"提示
+- 实现showFunnelIndicator函数，显示漏斗图标
+- 实现hideFunnelIndicator函数，隐藏漏斗图标
+- 实现loadConfig函数，加载配置
+- 实现saveConfig函数，保存配置
+- 实现handleResponseData函数，统一处理响应数据
+- 实现exportToWord函数，导出图表输出区内容为Word文档
 
 ### `scripts/chart.js`
 
@@ -778,6 +880,7 @@ Python依赖列表，包含：
 - 优化客户留存分析等高级分析功能的实现
 - 实现原始文件内容的完整处理路径（original_file_content字段）
 - 实现改进的条件路由逻辑
+- 实现更智能的迭代控制和质量评估机制
 
 ## 开发约定
 
@@ -851,3 +954,5 @@ Python依赖列表，包含：
 - **实现改进的条件路由机制**，支持动态流程选择
 - **实现改进的重规划跳过机制**，基于质量阈值优化性能
 - **实现更智能的代码生成和执行错误处理**，提升系统稳定性
+- **实现临时文件存储和自动清理机制**，支持完整原始文件内容处理
+- **实现文件内容的智能截断和采样机制**，优化上下文使用

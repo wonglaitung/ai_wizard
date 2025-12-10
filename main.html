@@ -91,37 +91,37 @@
                     <div class="config-form">
                         <div class="config-group">
                             <label for="base-url">基础 URL:</label>
-                            <input type="text" id="base-url" placeholder="请输入基础 URL" value="https://dashscope.aliyuncs.com/compatible-mode/v1">
+                            <input type="text" id="base-url" placeholder="请输入基础 URL" value="http://chat.icbcasia.com:8086/v1">
                         </div>
                         
                         <div class="config-group">
                             <label for="api-key">API 密钥:</label>
                             <div class="input-with-button">
-                                <input type="password" id="api-key" placeholder="请输入 API 密钥">
+                                <input type="password" id="api-key" placeholder="请输入 API 密钥" value="12345678">
                                 <button type="button" id="toggle-api-key" class="toggle-password-btn">👁️</button>
                             </div>
                         </div>
                         
                         <div class="config-group">
                             <label for="model-name">模型名称:</label>
-                            <input type="text" id="model-name" placeholder="请输入模型名称" value="qwen-max">
+                            <input type="text" id="model-name" placeholder="请输入模型名称" value="qwen3">
                         </div>
                         
                         <div class="config-group">
                             <label for="temperature">温度 (Temperature):</label>
-                            <input type="range" id="temperature" min="0" max="1" step="0.01" value="0.7">
-                            <span id="temperature-value">0.7</span>
+                            <input type="range" id="temperature" min="0" max="1" step="0.01" value="0.2">
+                            <span id="temperature-value">0.2</span>
                         </div>
                         
                         <div class="config-group">
                             <label for="max-tokens">最大 Token 数:</label>
-                            <input type="number" id="max-tokens" min="1" max="32768" value="8196">
+                            <input type="number" id="max-tokens" min="1" max="65536" value="65536">
                         </div>
                         
                         <div class="config-group">
                             <label for="top-p">Top P:</label>
-                            <input type="range" id="top-p" min="0" max="1" step="0.01" value="0.9">
-                            <span id="top-p-value">0.9</span>
+                            <input type="range" id="top-p" min="0" max="1" step="0.01" value="0.1">
+                            <span id="top-p-value">0.1</span>
                         </div>
                         
                         <div class="config-group">
