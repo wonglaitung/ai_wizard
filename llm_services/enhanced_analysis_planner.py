@@ -20,28 +20,17 @@ class EnhancedAnalysisPlanner:
     def __init__(self):
         pass
         self.operation_descriptions = {
-            "mean": "计算数值列的平均值，用于了解业务指标的平均水平",
-            "sum": "计算数值列的总和，用于了解业务指标的总体规模",
-            "max": "找出数值列的最大值，用于识别业务中的峰值表现",
-            "min": "找出数值列的最小值，用于识别业务中的最低表现",
-            "count": "计算列中非空值的数量，用于了解数据覆盖范围",
-            "percentage": "计算每个唯一值的百分比，用于分析业务构成比例",
-            "std": "计算数值列的标准差，用于评估业务指标的波动性",
-            "unique": "获取列中的唯一值，用于了解业务分类的多样性",
-            "median": "计算数值列的中位数，用于了解业务指标的中间水平",
-            "mode": "计算列的众数（出现频率最高的值），用于识别最常见的业务情况",
-            "variance": "计算数值列的方差，用于评估业务指标的离散程度",
-            "quantile_25": "计算数值列的25%分位数，用于了解业务指标的低分段表现",
-            "quantile_75": "计算数值列的75%分位数，用于了解业务指标的高分段表现",
-            "range": "计算数值列的范围（最大值-最小值），用于了解业务指标的波动区间",
-            "first": "获取列中的第一行数据，用于了解业务的起始状态",
-            "last": "获取列中的最后一行数据，用于了解业务的最新状态",
-            "missing_count": "计算列中缺失值的数量，用于评估数据完整性",
-            "missing_percentage": "计算列中缺失值的百分比，用于评估数据质量",
-            "correlation": "计算数值列之间的相关性矩阵，用于识别业务指标间的关联性",
-            "group_by": "按指定列分组并计算聚合统计（如sum、mean、count、max、min等），用于多维度数据透视分析",
-            "cross_tab": "创建交叉表分析两个分类变量之间的关系，用于关联性分析",
-            "pivot_table": "创建透视表，按行和列进行交叉汇总，用于多维度汇总分析",
+            "mean": "计算数值列的平均值",
+            "sum": "计算数值列的总和",
+            "max": "找出数值列的最大值",
+            "min": "找出数值列的最小值",
+            "percentage": "计算每个唯一值的百分比",
+            "mode": "计算列的众数（出现频率最高的值）",
+            "range": "计算数值列的范围（最大值-最小值）",
+            "correlation": "计算数值列之间的相关性矩阵",
+            "group_by": "按指定列分组并计算聚合统计（如sum、mean、count、max、min等）",
+            "cross_tab": "创建交叉表分析两个分类变量之间的关系",
+            "pivot_table": "创建透视表，按行和列进行交叉汇总",
             "aggregate": "执行复杂的聚合操作，可对指定列应用多种统计函数"
         }
         # 现在支持的操作列表是硬编码的，因为数据处理器完全依赖大模型生成代码
@@ -151,7 +140,7 @@ class EnhancedAnalysisPlanner:
 系统支持以下操作（用于业务数据透视）:
 {operations_info}
 
-IMPORTANT: 请严格按照以下JSON格式输出，仅输出JSON内容，不要包含任何其他内容（如解释、注释或标记）：
+IMPORTANT: 请严格按照以下JSON格式输出，仅输出JSON内容：
 {{
     "task_type": "任务类型（如：业务指标分析、业务趋势分析、业务构成分析、业务关联分析、业务诊断等）",
     "columns": ["需要分析的列名列表"],
@@ -162,8 +151,8 @@ IMPORTANT: 请严格按照以下JSON格式输出，仅输出JSON内容，不要�
             "description": "操作的描述"
         }}
     ],
-    "expected_output": "预期的输出结果描述（从业务角度解释）",
-    "rationale": "规划的推理过程，解释为什么选择这些操作"
+    "expected_output": "用一句话来从业务角度简单描述预期的输出结果",
+    "rationale": "用一句话来简单解释选择这些操作的原因"
 }}
 
 示例输出格式：
@@ -178,41 +167,6 @@ IMPORTANT: 请严格按照以下JSON格式输出，仅输出JSON内容，不要�
     "expected_output": "输出指定列的总和、平均值和最大值",
     "rationale": "基于用户请求和数据特征，选择适当的统计操作"
 }}
-
-对于多维度交叉分析，示例格式：
-{{
-    "task_type": "多维度交叉分析",
-    "columns": ["分类列1", "分类列2", "数值列1"],
-    "operations": [
-        {{"name": "group_by", "column": ["分类列1", "分类列2"], "description": "按指定的分类列进行分组统计"}},
-        {{"name": "pivot_table", "column": {{"index": "分类列1", "columns": "分类列2", "values": "数值列1", "aggfunc": "sum"}}, "description": "创建透视表进行多维度汇总分析"}},
-        {{"name": "cross_tab", "column": ["分类列1", "分类列2"], "description": "创建交叉表分析两个分类变量之间的关系"}}
-    ],
-    "expected_output": "输出多维度的分组统计结果",
-    "rationale": "基于多维度分析需求，使用分组、透视表和交叉表来展示不同维度下的数据特征"
-}}
-
-对于多工作表数据的交叉分析，示例格式：
-{{
-    "task_type": "多工作表数据分析",
-    "columns": ["工作表1数据列", "工作表2数据列", "分类列"],
-    "operations": [
-        {{"name": "group_by", "column": ["分类列"], "description": "按分类列分组进行统计"}},
-        {{"name": "cross_tab", "column": ["工作表1数据列", "工作表2数据列"], "description": "创建交叉表分析两个工作表间数据的关系"}},
-        {{"name": "count", "column": "工作表1数据列", "description": "计算工作表1的数据总数"}},
-        {{"name": "count", "column": "工作表2数据列", "description": "计算工作表2的数据总数"}}
-    ],
-    "expected_output": "输出各工作表数据的对比分析结果",
-    "rationale": "基于多工作表对比分析需求，使用分组统计和交叉表来展示不同工作表间的数据关系"
-}}
-
-重要提示：
-- 严格按照上述JSON格式输出，仅输出JSON内容
-- 不要包含任何解释、注释或代码块标记（如```json或```）
-- 确保JSON格式完全正确，避免语法错误
-- 操作名称必须从系统支持的操作中选择
-- 避免使用不存在的列名
-- 如果需要计算数量变化等衍生指标，需要先执行基础操作再进行计算
 """
         
         try:
@@ -285,19 +239,17 @@ IMPORTANT: 请严格按照以下JSON格式输出，仅输出JSON内容，不要�
             str: 格式化的学习上下文
         """
         if not plan_history:
-            return ""
+            return "无历史规划记录"
         
-        # 只取最近的3次规划历史
+        # 只取最近的3次规划历史以减少提示词长度
         recent_history = plan_history[-3:]
         
-        formatted_history = []
+        formatted_history = ["历史规划记录:"]
         for i, plan in enumerate(recent_history, 1):
-            formatted_history.append(f"历史规划 {i}:")
-            formatted_history.append(f"  任务类型: {plan.get('task_type', 'N/A')}")
-            formatted_history.append(f"  使用列: {plan.get('columns', [])}")
-            formatted_history.append(f"  使用操作: {[op.get('name', 'N/A') for op in plan.get('operations', [])]}")
-            formatted_history.append(f"  预期输出: {plan.get('expected_output', 'N/A')}")
-            formatted_history.append(f"  规划理由: {plan.get('rationale', 'N/A')}")
+            formatted_history.append(f"规划 {i}:")
+            formatted_history.append(f"- 任务类型: {plan.get('task_type', 'N/A')}")
+            formatted_history.append(f"- 使用操作: {[op.get('name', 'N/A') for op in plan.get('operations', [])]}")
+            formatted_history.append(f"- 预期输出: {plan.get('expected_output', 'N/A')}")
             formatted_history.append("")
         
         return "\n".join(formatted_history)
