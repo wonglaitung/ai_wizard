@@ -467,12 +467,12 @@ def extract_text_from_file(filepath, filename, sample=True):
         df = pd.read_csv(filepath)
         
         if sample:
-            # 智能采样：保留所有列名，随机采样最多100行数据
-            if len(df) > 100:
-                sampled_df = df.sample(n=100, random_state=42)  # 固定随机种子确保一致性
-                # 确保原始表头也在采样中，如果不在则添加
-                if not df.head(1).equals(sampled_df.head(1)):
-                    sampled_df = pd.concat([df.head(1), sampled_df]).drop_duplicates()
+            # 智能采样：保留所有列名，随机采样最多50行数据
+            if len(df) > 50:
+                    sampled_df = df.sample(n=50, random_state=42)  # 固定随机种子确保一致性
+                    # 确保原始表头也在采样中，如果不在则添加
+                    if not df.head(1).equals(sampled_df.head(1)):
+                        sampled_df = pd.concat([df.head(1), sampled_df]).drop_duplicates()
             else:
                 sampled_df = df
             
@@ -491,9 +491,9 @@ def extract_text_from_file(filepath, filename, sample=True):
             sheet_strings.append(f"Sheet: {sheet_name}")
             
             if sample:
-                # 对每个工作表进行智能采样：保留所有列名，随机采样最多100行数据
-                if len(df) > 100:
-                    sampled_df = df.sample(n=100, random_state=42)  # 固定随机种子确保一致性
+                # 对每个工作表进行智能采样：保留所有列名，随机采样最多50行数据
+                if len(df) > 50:
+                    sampled_df = df.sample(n=50, random_state=42)  # 固定随机种子确保一致性
                     # 确保原始表头也在采样中，如果不在则添加
                     if not df.head(1).equals(sampled_df.head(1)):
                         sampled_df = pd.concat([df.head(1), sampled_df]).drop_duplicates()
