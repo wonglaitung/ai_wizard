@@ -11,11 +11,117 @@ from io import StringIO
 import logging
 from typing import Dict, Any, Optional
 from llm_services.qwen_engine import chat_with_llm
+from llm_services.chat_history_compressor import estimate_token_count
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
-def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
+def _sample_dataframe_result(result, max_rows=50):
+    """
+    对大型DataFrame或Series结果进行智能采样，保留所有列以维持数据基本结构
+    """
+    if isinstance(result, pd.DataFrame):
+        # 只限制行数，保留所有列以维持数据基本结构
+        if result.shape[0] > max_rows:
+            # 随机选择行
+            sampled_indices = np.random.choice(result.index, size=min(max_rows, len(result)), replace=False)
+            result = result.loc[sampled_indices]
+    elif isinstance(result, pd.Series):
+        if len(result) > max_rows:
+            # 随机选择索引
+            sampled_indices = np.random.choice(result.index, size=min(max_rows, len(result)), replace=False)
+            result = result.loc[sampled_indices]
+    elif isinstance(result, dict):
+        # 对字典类型的大型结果进行采样
+        if len(result) > max_rows:
+            # 只取前max_rows个项目
+            sampled_items = {k: result[k] for k in list(result.keys())[:max_rows]}
+            result = sampled_items
+    elif isinstance(result, list):
+        # 对列表类型的大型结果进行采样
+        if len(result) > max_rows:
+            # 随机选择元素
+            sampled_indices = np.random.choice(len(result), size=min(max_rows, len(result)), replace=False)
+            result = [result[i] for i in sorted(sampled_indices)]
+    
+    return result
+
+def _limit_result_size(result, settings=None, max_tokens=None):
+    """
+    限制结果大小，防止超出大模型长度限制
+    使用与app.py相同的token估算方法
+    """
+    # 如果没有指定max_tokens，则从settings中获取，或使用默认值
+    if max_tokens is None:
+        if settings and 'maxTokens' in settings:
+            # 从配置变量获取maxTokens，并使用1/4作为安全阈值
+            max_tokens = int(settings['maxTokens']) // 4
+        else:
+            # 使用默认值，但设置为较低的值以确保安全
+            max_tokens = 2048  # 使用安全的默认值
+    
+    # 首先估算结果的token数量
+    try:
+        result_str = str(result)
+        token_count = estimate_token_count(result_str)
+        
+        if token_count <= max_tokens:
+            # 如果token数量在限制范围内，直接返回
+            return result
+        else:
+            # 如果结果太大，尝试对结果进行采样
+            sampled_result = _sample_dataframe_result(result)
+            sampled_result_str = str(sampled_result)
+            sampled_token_count = estimate_token_count(sampled_result_str)
+            
+            if sampled_token_count <= max_tokens:
+                logger.info(f"结果被采样以符合token限制: {sampled_token_count}/{max_tokens}")
+                return sampled_result
+            else:
+                # 如果采样后仍然太大，进行更激进的截断
+                logger.warning(f"结果即使采样后仍然超过token限制: {sampled_token_count}/{max_tokens}，进行截断")
+                
+                # 对于字典类型的结果，尝试保持结构完整性
+                if isinstance(result, dict):
+                    # 如果是字典，只保留前几个键值对以保持字典结构
+                    if len(result) > 0:
+                        # 创建一个新字典，只包含前几个元素
+                        limited_dict = {}
+                        for i, (key, value) in enumerate(result.items()):
+                            if i >= max_tokens // 10:  # 限制为最大项数，避免键值对过大
+                                break
+                            # 对每个值进行大小限制，但使用较低的递归限制以防循环
+                            # 为了防止无限递归，我们对字典值使用一个较小的限制值
+                            if isinstance(value, dict):
+                                # 如果值是字典，递归调用但使用更小的max_tokens
+                                limited_value = _limit_result_size(value, settings, max_tokens // 4)
+                            elif isinstance(value, (list, tuple, pd.DataFrame, pd.Series)):
+                                # 对于其他复杂类型，同样进行限制
+                                limited_value = _limit_result_size(value, settings, max_tokens // 4)
+                            else:
+                                # 对于简单类型，直接保留
+                                limited_value = value
+                            limited_dict[key] = limited_value
+                        return limited_dict
+                    else:
+                        return result  # 空字典直接返回
+                else:
+                    # 使用与app.py中相似的截断逻辑，对非字典类型
+                    total_chars = len(result_str)
+                    # 估算平均每个字符对应的token数
+                    avg_token_per_char = token_count / total_chars if total_chars > 0 else 0.25
+                    # 计算应该保留的字符数
+                    chars_to_keep = int(max_tokens / avg_token_per_char) if avg_token_per_char > 0 else max_tokens
+                    
+                    # 对于非字典类型，截取前chars_to_keep个字符
+                    truncated_result = result_str[:chars_to_keep] + "...[结果被截断]"
+                    return truncated_result
+    except Exception as e:
+        logger.error(f"限制结果大小时出错: {str(e)}")
+        # 如果出现错误，返回原始结果
+        return result
+
+def execute_generated_code(code: str, df: pd.DataFrame, settings=None) -> Dict[str, Any]:
     """
     直接执行大模型生成的代码
     """
@@ -70,7 +176,9 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
             # 对于表达式，使用eval执行
             result = eval(cleaned_code.strip(), execution_env)
         
-        return {"result": result, "success": True}
+        # 在返回结果前限制结果大小，使用settings参数
+        limited_result = _limit_result_size(result, settings)
+        return {"result": limited_result, "success": True}
             
     except Exception as e:
         # 检查是否是关于tuple的错误 - 包括多种可能的错误信息
@@ -125,7 +233,9 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
                     result = eval(fixed_code.strip(), execution_env)
                 
                 logger.info(f"成功修复并执行了包含列选择问题的代码")
-                return {"result": result, "success": True}
+                # 在返回结果前限制结果大小，使用settings参数
+                limited_result = _limit_result_size(result, settings)
+                return {"result": limited_result, "success": True}
             except Exception as fix_error:
                 logger.error(f"修复后的代码执行仍然失败: {str(fix_error)}")
                 return {"error": str(fix_error), "success": False}
@@ -176,7 +286,9 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
                 # 检查结果是否为None
                 if result is not None:
                     logger.info(f"成功执行了pandas操作，结果类型: {type(result)}")
-                    return {"result": result, "success": True}
+                    # 在返回结果前限制结果大小
+                    limited_result = _limit_result_size(result)
+                    return {"result": limited_result, "success": True}
                 else:
                     # 如果结果是None，记录日志但继续
                     logger.warning(f"pandas操作执行成功但返回了None: {fixed_code}")
@@ -196,7 +308,9 @@ def execute_generated_code(code: str, df: pd.DataFrame) -> Dict[str, Any]:
                                 result = execution_env.get('result')
                         else:
                             result = eval(fixed_code.strip(), execution_env)
-                        return {"result": result, "success": True}
+                        # 在返回结果前限制结果大小，使用settings参数
+                        limited_result = _limit_result_size(result, settings)
+                        return {"result": limited_result, "success": True}
             except Exception as pandas_error:
                 logger.error(f"pandas操作处理失败: {str(pandas_error)}")
         # 检查是否是由于 ~ 操作符对非布尔类型使用导致的错误
@@ -259,7 +373,9 @@ import numpy as np
                         result = eval(wrapped_code.strip(), execution_env)
                     
                     logger.info("成功修复并执行了包含 ~ 操作符问题的代码")
-                    return {"result": result, "success": True}
+                    # 在返回结果前限制结果大小，使用settings参数
+                    limited_result = _limit_result_size(result, settings)
+                    return {"result": limited_result, "success": True}
                 else:
                     # 如果错误中包含 ~ 但代码中没有 ~，尝试使用原始修复方法
                     fixed_code = _fix_dataframe_column_access(cleaned_code)
@@ -422,7 +538,7 @@ import numpy as np
                     result = eval(fixed_code.strip(), execution_env)
                 
                 logger.info("成功修复并执行了包含语法错误的代码")
-                return {"result": result, "success": True}
+                return {"result": _limit_result_size(result, settings), "success": True}
                 
             except Exception as syntax_error:
                 logger.error(f"修复语法错误失败: {str(syntax_error)}")
@@ -468,7 +584,7 @@ import numpy as np
                         result = eval(backup_fixed_code.strip(), execution_env)
                     
                     logger.info("通过备用方法修复并执行了代码")
-                    return {"result": result, "success": True}
+                    return {"result": _limit_result_size(result, settings), "success": True}
                     
                 except Exception as backup_error:
                     logger.error(f"备用修复方法也失败: {str(backup_error)}")
@@ -856,24 +972,32 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
             # 生成代码
             generated_code = chat_with_llm(user_request, **model_params)
             
-            # 清理并执行生成的代码
-            execution_result = execute_generated_code(generated_code, current_df)
+            # 清理并执行生成的代码，传入settings参数
+            execution_result = execute_generated_code(generated_code, current_df, settings)
             
             if execution_result["success"]:
-                results[f"{op_name}_result"] = _convert_pandas_types(execution_result["result"])
+                converted_result = _convert_pandas_types(execution_result["result"])
+                # 限制转换后结果的大小，使用settings参数
+                limited_result = _limit_result_size(converted_result, settings)
+                results[f"{op_name}_result"] = limited_result
             else:
                 # 如果执行失败，记录错误信息但继续处理其他操作
                 error_msg = execution_result['error']
-                results[f"{op_name}_error"] = f"代码执行错误: {error_msg}"
+                # 限制错误消息的大小，使用settings参数
+                limited_error_msg = _limit_result_size(f"代码执行错误: {error_msg}", settings)
+                results[f"{op_name}_error"] = limited_error_msg
                 logger.warning(f"操作 {op_name} 执行失败: {error_msg}")
                 
         except Exception as e:
             # 捕获所有异常，记录错误但继续处理其他操作
             error_msg = str(e)
-            results[op.get("name", "unknown")] = f"处理错误: {error_msg}"
+            limited_error_msg = _limit_result_size(f"处理错误: {error_msg}", settings)
+            results[op.get("name", "unknown")] = limited_error_msg
             logger.error(f"处理操作 {op} 时出错: {error_msg}")
     
-    return results
+    # 对最终的results字典也应用大小限制，使用settings参数
+    final_results = _limit_result_size(results, settings)
+    return final_results
 
 
 def _handle_cross_sheet_operations(multi_sheet_data, task_plan, api_key, settings):
