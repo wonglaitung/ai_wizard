@@ -220,7 +220,7 @@ def _process_streaming_response(response, model):
     return full_response
 
 
-def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
+def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=False, history=None):
     """
     Generate a streaming response from Qwen model for a given query.
     
@@ -233,7 +233,7 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
         frequency_penalty (float): Controls repetition. Default is 0.5.
         api_key (str): API key for authentication. If None, uses environment variable. Default is None.
         base_url (str): The base URL for the API. If None, uses default.
-        enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is True.
+        enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is False.
         history (list): Chat history containing previous messages. Default is None.
         
     Yields:
@@ -276,7 +276,7 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
         _handle_error(error)
 
 
-def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=True, history=None):
+def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=False, history=None):
     """
     Generate a response from Qwen model for a given query.
     
@@ -289,7 +289,7 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         frequency_penalty (float): Controls repetition. Default is 0.5.
         api_key (str): API key for authentication. If None, uses environment variable. Default is None.
         base_url (str): The base URL for the API. If None, uses default.
-        enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is True.
+        enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is False.
         history (list): Chat history containing previous messages. Default is None.
         
     Returns:
