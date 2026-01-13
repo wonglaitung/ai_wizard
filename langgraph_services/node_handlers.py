@@ -631,7 +631,18 @@ def chat_node(state: AnalysisState) -> AnalysisState:
                 execution_result = tool_manager.execute_tool(function_name, function_args)
                 
                 if execution_result['success']:
-                    result_message = f"✅ {execution_result['result']}"
+                    result_data = execution_result['result']
+                    
+                    # 处理字典格式的工具返回结果
+                    if isinstance(result_data, dict) and 'url' in result_data:
+                        # 提取URL和消息
+                        url = result_data.get('url', '')
+                        message = result_data.get('message', '')
+                        result_message = f"✅ {message} {url}"
+                    else:
+                        # 处理字符串格式的工具返回结果
+                        result_message = f"✅ {result_data}"
+                    
                     logger.info(f"工具执行成功: {result_message}")
                     tool_results.append(result_message)
                 else:

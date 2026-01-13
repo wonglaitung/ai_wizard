@@ -4,7 +4,6 @@
 """
 
 import logging
-import webbrowser
 from typing import Dict, Any, Callable, Optional, List
 from functools import wraps
 
@@ -107,7 +106,7 @@ tool_manager = ToolManager()
 
 @tool_manager.register_tool(
     name='open_url',
-    description='在浏览器中打开指定的URL。适用于用户想要访问特定网站或网页的情况。',
+    description='生成指定的URL链接。适用于用户想要访问特定网站或网页的情况。',
     parameters={
         'type': 'object',
         'properties': {
@@ -119,41 +118,33 @@ tool_manager = ToolManager()
         'required': ['url']
     }
 )
-def open_url(url: str) -> str:
+def open_url(url: str) -> Dict[str, str]:
     """
-    在浏览器中打开指定的URL
+    生成指定的URL链接
     
     Args:
         url: 要打开的URL地址
         
     Returns:
-        操作结果消息
+        包含URL和操作建议的字典
     """
     try:
         # 验证URL格式
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
         
-        # 检测是否在WSL2环境中
-        import platform
-        is_wsl = 'microsoft' in platform.uname().release.lower()
-        
-        if is_wsl:
-            # 在WSL2环境中，使用Windows的cmd打开浏览器
-            import subprocess
-            subprocess.run(['cmd.exe', '/c', 'start', url], check=True)
-            return f"成功在Windows浏览器中打开: {url}"
-        else:
-            # 在其他环境中，使用webbrowser打开
-            webbrowser.open(url)
-            return f"成功在浏览器中打开: {url}"
+        return {
+            'url': url,
+            'action': 'open',
+            'message': f'已为您生成链接，点击即可访问: {url}'
+        }
     except Exception as e:
-        raise Exception(f"打开URL失败: {str(e)}")
+        raise Exception(f"生成URL失败: {str(e)}")
 
 
 @tool_manager.register_tool(
     name='search_web',
-    description='在搜索引擎中搜索指定的关键词。适用于用户想要查找信息的情况。',
+    description='生成搜索引擎搜索链接。适用于用户想要查找信息的情况。',
     parameters={
         'type': 'object',
         'properties': {
@@ -170,16 +161,16 @@ def open_url(url: str) -> str:
         'required': ['query']
     }
 )
-def search_web(query: str, search_engine: str = 'baidu') -> str:
+def search_web(query: str, search_engine: str = 'baidu') -> Dict[str, str]:
     """
-    在搜索引擎中搜索指定的关键词
+    生成搜索引擎搜索链接
     
     Args:
         query: 搜索关键词
         search_engine: 搜索引擎（baidu, google, bing）
         
     Returns:
-        操作结果消息
+        包含URL和操作建议的字典
     """
     try:
         # 根据搜索引擎构建搜索URL
@@ -191,32 +182,24 @@ def search_web(query: str, search_engine: str = 'baidu') -> str:
         
         url = search_urls.get(search_engine, search_urls['baidu'])
         
-        # 检测是否在WSL2环境中
-        import platform
-        is_wsl = 'microsoft' in platform.uname().release.lower()
-        
-        if is_wsl:
-            # 在WSL2环境中，使用Windows的cmd打开浏览器
-            import subprocess
-            subprocess.run(['cmd.exe', '/c', 'start', url], check=True)
-        else:
-            # 在其他环境中，使用webbrowser打开
-            webbrowser.open(url)
-        
         engine_name = {
             'baidu': '百度',
             'google': '谷歌',
             'bing': '必应'
         }.get(search_engine, '百度')
         
-        return f"成功在{engine_name}中搜索: {query}"
+        return {
+            'url': url,
+            'action': 'open',
+            'message': f'已为您生成{engine_name}搜索链接，点击即可搜索: {query}'
+        }
     except Exception as e:
-        raise Exception(f"搜索失败: {str(e)}")
+        raise Exception(f"生成搜索链接失败: {str(e)}")
 
 
 @tool_manager.register_tool(
     name='open_github',
-    description='打开GitHub网站或指定的GitHub仓库。适用于用户想要访问GitHub的情况。',
+    description='生成GitHub网站或指定GitHub仓库的链接。适用于用户想要访问GitHub的情况。',
     parameters={
         'type': 'object',
         'properties': {
@@ -228,47 +211,38 @@ def search_web(query: str, search_engine: str = 'baidu') -> str:
         'required': []
     }
 )
-def open_github(repo: Optional[str] = None) -> str:
+def open_github(repo: Optional[str] = None) -> Dict[str, str]:
     """
-    打开GitHub网站或指定的GitHub仓库
+    生成GitHub网站或指定GitHub仓库的链接
     
     Args:
         repo: GitHub仓库路径（可选）
         
     Returns:
-        操作结果消息
+        包含URL和操作建议的字典
     """
     try:
         if repo:
             # 打开指定的仓库
             url = f'https://github.com/{repo}'
+            message = f'已为您生成GitHub仓库链接，点击即可访问: {repo}'
         else:
             # 打开GitHub首页
             url = 'https://github.com'
+            message = '已为您生成GitHub首页链接，点击即可访问'
         
-        # 检测是否在WSL2环境中
-        import platform
-        is_wsl = 'microsoft' in platform.uname().release.lower()
-        
-        if is_wsl:
-            # 在WSL2环境中，使用Windows的cmd打开浏览器
-            import subprocess
-            subprocess.run(['cmd.exe', '/c', 'start', url], check=True)
-        else:
-            # 在其他环境中，使用webbrowser打开
-            webbrowser.open(url)
-        
-        if repo:
-            return f"成功打开GitHub仓库: {repo}"
-        else:
-            return "成功打开GitHub首页"
+        return {
+            'url': url,
+            'action': 'open',
+            'message': message
+        }
     except Exception as e:
-        raise Exception(f"打开GitHub失败: {str(e)}")
+        raise Exception(f"生成GitHub链接失败: {str(e)}")
 
 
 @tool_manager.register_tool(
     name='open_youtube',
-    description='打开YouTube网站或搜索指定的视频。适用于用户想要观看视频或访问YouTube的情况。',
+    description='生成YouTube网站或视频搜索的链接。适用于用户想要观看视频或访问YouTube的情况。',
     parameters={
         'type': 'object',
         'properties': {
@@ -280,39 +254,30 @@ def open_github(repo: Optional[str] = None) -> str:
         'required': []
     }
 )
-def open_youtube(query: Optional[str] = None) -> str:
+def open_youtube(query: Optional[str] = None) -> Dict[str, str]:
     """
-    打开YouTube网站或搜索指定的视频
+    生成YouTube网站或视频搜索的链接
     
     Args:
         query: 搜索关键词（可选）
         
     Returns:
-        操作结果消息
+        包含URL和操作建议的字典
     """
     try:
         if query:
             # 搜索视频
             url = f'https://www.youtube.com/results?search_query={query}'
+            message = f'已为您生成YouTube搜索链接，点击即可搜索: {query}'
         else:
             # 打开YouTube首页
             url = 'https://www.youtube.com'
+            message = '已为您生成YouTube首页链接，点击即可访问'
         
-        # 检测是否在WSL2环境中
-        import platform
-        is_wsl = 'microsoft' in platform.uname().release.lower()
-        
-        if is_wsl:
-            # 在WSL2环境中，使用Windows的cmd打开浏览器
-            import subprocess
-            subprocess.run(['cmd.exe', '/c', 'start', url], check=True)
-        else:
-            # 在其他环境中，使用webbrowser打开
-            webbrowser.open(url)
-        
-        if query:
-            return f"成功在YouTube中搜索: {query}"
-        else:
-            return "成功打开YouTube首页"
+        return {
+            'url': url,
+            'action': 'open',
+            'message': message
+        }
     except Exception as e:
-        raise Exception(f"打开YouTube失败: {str(e)}")
+        raise Exception(f"生成YouTube链接失败: {str(e)}")

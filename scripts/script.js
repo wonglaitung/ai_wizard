@@ -1377,14 +1377,45 @@ function handleResponseData(jsonData, outputAiMessageElement, aiMessageElement, 
         
         // 检测是否为工具执行结果
         if (aiReply.includes('✅') || aiReply.includes('❌')) {
-            // 为工具执行结果添加特殊样式
-            const toolResultHtml = `
-                <div class="tool-execution-result">
-                    ${aiReply.replace(/✅/g, '<span class="tool-success">✅</span>')
-                             .replace(/❌/g, '<span class="tool-error">❌</span>')}
-                </div>
-            `;
-            updateMessageDisplay(toolResultHtml, true);
+            // 尝试解析工具执行结果中的URL
+            const urlMatch = aiReply.match(/https?:\/\/[^\s]+/);
+            
+            if (urlMatch) {
+                const url = urlMatch[0];
+                const toolResultHtml = `
+                    <div class="tool-execution-result">
+                        <span class="tool-success">✅</span>
+                        ${aiReply.replace(url, '').replace(/✅/g, '')}
+                        <a href="${url}" target="_blank" class="tool-url-link">
+                            🔗 点击打开链接
+                        </a>
+                    </div>
+                `;
+                // 直接设置innerHTML，不通过marked.js解析
+                if (outputToggle.checked && outputAiMessageElement) {
+                    outputAiMessageElement.innerHTML = toolResultHtml;
+                    outputMessages.scrollTop = outputMessages.scrollHeight;
+                } else if (aiMessageElement) {
+                    aiMessageElement.innerHTML = toolResultHtml;
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            } else {
+                // 为工具执行结果添加特殊样式
+                const toolResultHtml = `
+                    <div class="tool-execution-result">
+                        ${aiReply.replace(/✅/g, '<span class="tool-success">✅</span>')
+                                 .replace(/❌/g, '<span class="tool-error">❌</span>')}
+                    </div>
+                `;
+                // 直接设置innerHTML，不通过marked.js解析
+                if (outputToggle.checked && outputAiMessageElement) {
+                    outputAiMessageElement.innerHTML = toolResultHtml;
+                    outputMessages.scrollTop = outputMessages.scrollHeight;
+                } else if (aiMessageElement) {
+                    aiMessageElement.innerHTML = toolResultHtml;
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }
         } else {
             updateMessageDisplay(aiReply, true);
         }

@@ -48,7 +48,13 @@ def test_tool_execution():
             # 注意：实际执行会打开浏览器，这里只测试参数验证
             execution_result = tool_manager.execute_tool(tool_name, parameters)
             if execution_result['success']:
-                print(f"✅ 工具执行成功: {execution_result['result']}")
+                result_data = execution_result['result']
+                print(f"✅ 工具执行成功")
+                if isinstance(result_data, dict):
+                    print(f"   URL: {result_data.get('url', 'N/A')}")
+                    print(f"   消息: {result_data.get('message', 'N/A')}")
+                else:
+                    print(f"   结果: {result_data}")
             else:
                 print(f"❌ 工具执行失败: {execution_result['error']}")
         except Exception as e:
