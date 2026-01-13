@@ -194,8 +194,14 @@ IMPORTANT: 请严格按照以下JSON格式输出，仅输出JSON内容：
             # 调用大模型获取任务规划
             response = chat_with_llm(prompt, **model_params)
             
+            # 提取响应内容（chat_with_llm现在返回字典格式）
+            if isinstance(response, dict):
+                response_str = response.get('content', '')
+            else:
+                response_str = str(response)
+            
             # 解析JSON响应
-            task_plan = json.loads(response)
+            task_plan = json.loads(response_str)
             
             # 验证返回的计划是否包含必要的字段
             required_fields = ["task_type", "columns", "operations", "expected_output", "rationale"]

@@ -970,7 +970,12 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
             )
             
             # 生成代码
-            generated_code = chat_with_llm(user_request, **model_params)
+            code_response = chat_with_llm(user_request, **model_params)
+            # 提取响应内容（chat_with_llm现在返回字典格式）
+            if isinstance(code_response, dict):
+                generated_code = code_response.get('content', '')
+            else:
+                generated_code = str(code_response)
             
             # 清理并执行生成的代码，传入settings参数
             execution_result = execute_generated_code(generated_code, current_df, settings)
@@ -997,6 +1002,26 @@ def process_data(task_plan, file_content=None, api_key=None, settings=None):
     
     # 对最终的results字典也应用大小限制，使用settings参数
     final_results = _limit_result_size(results, settings)
+    
+    # 确保返回的是字典类型
+    if not isinstance(final_results, dict):
+        logger.warning(f"_limit_result_size 返回了非字典类型: {type(final_results)}，强制转换为字典")
+        # 如果返回了字符串，尝试解析回字典
+        if isinstance(final_results, str):
+            try:
+                # 尝试从字符串中提取JSON
+                import re
+                json_match = re.search(r'\{.*\}', final_results, re.DOTALL)
+                if json_match:
+                    final_results = json.loads(json_match.group(0))
+                else:
+                    # 如果无法解析，返回一个包含错误信息的字典
+                    final_results = {"error": "结果过大且无法解析"}
+            except:
+                final_results = {"error": "结果过大且解析失败"}
+        else:
+            final_results = {"error": f"结果类型错误: {type(final_results)}"}
+    
     return final_results
 
 

@@ -125,7 +125,12 @@ def compress_chat_history(chat_history: List[Dict[str, Any]], max_tokens: int = 
                 )
                 
                 # 调用大模型生成摘要
-                summary = chat_with_llm(summary_prompt, **model_params)
+                summary_response = chat_with_llm(summary_prompt, **model_params)
+                # 提取响应内容（chat_with_llm现在返回字典格式）
+                if isinstance(summary_response, dict):
+                    summary = summary_response.get('content', '')
+                else:
+                    summary = str(summary_response)
                 
                 # 用摘要替换历史记录，只保留最后一条消息作为上下文
                 final_history = [{

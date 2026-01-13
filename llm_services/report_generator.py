@@ -78,7 +78,12 @@ def generate_report(task_plan, computation_results, api_key=None, output_as_tabl
         )
         
         # 调用大模型生成报告
-        report = chat_with_llm(prompt, **model_params)
+        report_response = chat_with_llm(prompt, **model_params)
+        # 提取响应内容（chat_with_llm现在返回字典格式）
+        if isinstance(report_response, dict):
+            report = report_response.get('content', '')
+        else:
+            report = str(report_response)
         return report
     except Exception as e:
         return f"生成报告时出错: {str(e)}"

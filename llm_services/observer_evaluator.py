@@ -89,7 +89,13 @@ def evaluate_analysis_results(task_plan: Dict[str, Any],
     
     try:
         # 调用LLM进行评估
-        evaluation_result_str = chat_with_llm(evaluation_prompt, **model_params)
+        evaluation_response = chat_with_llm(evaluation_prompt, **model_params)
+        
+        # 提取响应内容（chat_with_llm现在返回字典格式）
+        if isinstance(evaluation_response, dict):
+            evaluation_result_str = evaluation_response.get('content', '')
+        else:
+            evaluation_result_str = str(evaluation_response)
         
         # 解析评估结果
         # 尝试从响应中提取JSON
