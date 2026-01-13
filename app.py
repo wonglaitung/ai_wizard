@@ -261,8 +261,8 @@ def run_conditional_graph(initial_state: AnalysisState):
         # 对于分步分析，使用分析图并流式输出中间结果
         return run_analysis_with_streaming(initial_state)
     else:
-        # 对于普通聊天，使用聊天图
-        return run_chat_with_streaming(initial_state)
+        # 对于普通聊天，直接调用chat_node以支持function calling
+        return run_chat_with_function_calling(initial_state)
 
 
 def run_analysis_with_streaming(initial_state: AnalysisState):
@@ -378,10 +378,9 @@ def run_analysis_with_streaming(initial_state: AnalysisState):
     return Response(generate(), mimetype='text/event-stream')
 
 
-def run_chat_with_streaming(initial_state: AnalysisState):
+def run_chat_with_function_calling(initial_state: AnalysisState):
     """
-    使用聊天图并流式输出结果
-    对于真正流式的聊天响应，我们需要直接使用LLM的流式API
+    使用聊天节点并支持function calling的流式输出
     
     Args:
         initial_state (AnalysisState): 初始状态
@@ -389,51 +388,31 @@ def run_chat_with_streaming(initial_state: AnalysisState):
     Returns:
         Response: 流式响应
     """
-    app.logger.info('开始LangGraph聊天流程（流式输出）')
+    app.logger.info('开始LangGraph聊天流程（支持function calling）')
     
     def generate():
         try:
-            # 直接使用LLM的流式API来实现真正的流式输出
-            from llm_services.qwen_engine import chat_with_llm_stream
+            # 导入chat_node
+            from langgraph_services.node_handlers import chat_node
             
-            user_message = initial_state["user_message"]
-            file_content = initial_state["file_content"]
-            chat_history = initial_state["chat_history"]
-            settings = initial_state["settings"]
-            output_as_table = initial_state["output_as_table"]  # 获取表格输出设置
+            # 调用chat_node处理用户请求
+            result_state = chat_node(initial_state)
             
-            # 压缩历史记录以避免超出token限制
-            if compress_chat_history:
-                compressed_chat_history = compress_chat_history(chat_history, settings.get('maxTokens', 8196), 0.7, settings)
-            else:
-                compressed_chat_history = chat_history  # 如果函数不可用，使用原始历史记录
+            # 检查是否有错误
+            if result_state.get("error"):
+                app.logger.error(f"聊天节点返回错误: {result_state['error']}")
+                yield 'data: ' + json.dumps({'error': result_state['error']}) + '\n\n'
+                yield 'data: [DONE]\n\n'
+                return
             
-            # 如果需要表格输出，修改用户消息以包含相关指令
-            original_user_message = user_message
-            if output_as_table:
-                table_instruction = "\n\n请在回答中尽可能使用表格来组织和呈现数据，特别是当涉及数值、比较或分类信息时。使用Markdown表格格式。"
-                user_message = original_user_message + table_instruction
+            # 获取最终报告
+            final_report = result_state.get("final_report", "")
             
-            # 如果有文件内容，将其添加到用户消息中
-            if file_content:
-                user_message = f"请分析以下文件内容：\n\n{file_content}\n\n{user_message}"
-            
-            # 准备模型参数
-            from llm_services.qwen_engine import create_model_params
-            model_params = create_model_params(
-                settings=settings,
-                api_key=settings.get('apiKey'),  # 只使用settings中的api_key参数
-                default_model='qwen-max',
-                default_temperature=0.7,  # 聊天使用用户设置的温度
-                default_max_tokens=2048   # 使用用户配置的值，但确保足够大
-            )
-            
-            app.logger.info(f'开始调用LLM流式API，表格输出模式: {output_as_table}')
-            
-            # 调用模型获取流式回复
-            for chunk in chat_with_llm_stream(user_message, **model_params):
-                if chunk:
-                    yield 'data: ' + json.dumps({'reply': chunk}) + '\n\n'
+            # 模拟流式输出（将完整响应分块发送）
+            chunk_size = 20  # 每次发送20个字符
+            for i in range(0, len(final_report), chunk_size):
+                chunk = final_report[i:i + chunk_size]
+                yield 'data: ' + json.dumps({'reply': chunk}) + '\n\n'
             
             # 发送结束信号
             app.logger.info('LangGraph聊天流程完成')

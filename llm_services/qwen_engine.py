@@ -144,13 +144,13 @@ def embed_with_llm(query, base_url=None, api_key=None):
         raise error  # Re-raise the error for the caller to handle
 
 
-def _prepare_payload(messages, model, stream, temperature, max_tokens, top_p, frequency_penalty, enable_thinking):
+def _prepare_payload(messages, model, stream, temperature, max_tokens, top_p, frequency_penalty, enable_thinking, tools=None):
     """准备请求载荷"""
     validated_temperature, validated_max_tokens, validated_top_p, validated_frequency_penalty = _validate_and_limit_params(
         temperature, max_tokens, top_p, frequency_penalty
     )
     
-    return {
+    payload = {
         'model': model,
         'messages': messages,
         'stream': stream,
@@ -161,6 +161,12 @@ def _prepare_payload(messages, model, stream, temperature, max_tokens, top_p, fr
         'seed': 1368,
         'enable_thinking': enable_thinking
     }
+    
+    # 如果提供了tools参数，添加到payload中
+    if tools:
+        payload['tools'] = tools
+    
+    return payload
 
 
 def create_model_params(settings=None, api_key=None, default_model='qwen-max', default_temperature=0.7, 
@@ -276,7 +282,7 @@ def chat_with_llm_stream(query, model='qwen-max', temperature=0.7, max_tokens=81
         _handle_error(error)
 
 
-def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=False, history=None):
+def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top_p=0.9, frequency_penalty=0.5, api_key=None, base_url=None, enable_thinking=False, history=None, tools=None):
     """
     Generate a response from Qwen model for a given query.
     
@@ -291,9 +297,14 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         base_url (str): The base URL for the API. If None, uses default.
         enable_thinking (bool): Whether to enable thinking mode (推理模式). Default is False.
         history (list): Chat history containing previous messages. Default is None.
+        tools (list): List of tools available for function calling. Default is None.
         
     Returns:
-        str: The model's response text
+        dict: 包含响应内容和tool_calls信息的字典
+            {
+                'content': str,  # 文本响应内容
+                'tool_calls': list or None  # 工具调用信息
+            }
         
     Raises:
         Exception: If the API request fails
@@ -313,10 +324,12 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         # 准备消息列表，包含历史记录和当前查询
         messages = _prepare_messages(query, history)
         
-        payload = _prepare_payload(messages, model, False, temperature, max_tokens, top_p, frequency_penalty, enable_thinking)
+        payload = _prepare_payload(messages, model, False, temperature, max_tokens, top_p, frequency_penalty, enable_thinking, tools)
         
         # 记录调用信息
         logger.info(f"[LLM CALL] Calling model: {model} with query: {query}")
+        if tools:
+            logger.info(f"[LLM CALL] Tools provided: {len(tools)} tools")
         
         # 构建完整的API URL
         api_url = f"{base_url}/chat/completions"
@@ -331,16 +344,26 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
             raise Exception(f'API响应格式错误: {response_json}')
         
         choice = response_json['choices'][0]
-        if 'message' not in choice or 'content' not in choice['message']:
+        if 'message' not in choice:
             logger.error(f'API响应缺少message内容: {response_json}')
             raise Exception(f'API响应格式错误: {response_json}')
         
-        result = choice['message']['content']  # Return the response text
+        message = choice['message']
+        
+        # 提取内容和工具调用信息
+        content = message.get('content', '')
+        tool_calls = message.get('tool_calls', None)
         
         # 记录响应信息
-        logger.info(f"[LLM RESPONSE] Model {model} response: {result[:200]}{'...' if len(result) > 200 else ''}")
+        if content:
+            logger.info(f"[LLM RESPONSE] Model {model} response: {content[:200]}{'...' if len(content) > 200 else ''}")
+        if tool_calls:
+            logger.info(f"[LLM RESPONSE] Tool calls requested: {len(tool_calls)} calls")
         
-        return result
+        return {
+            'content': content,
+            'tool_calls': tool_calls
+        }
     except requests.exceptions.HTTPError as http_err:
         _handle_http_error(http_err)
     except Exception as error:

@@ -553,9 +553,11 @@ def generate_report_node(state: AnalysisState) -> AnalysisState:
 def chat_node(state: AnalysisState) -> AnalysisState:
     """
     聊天节点
-    处理普通聊天请求（非分步分析）
+    处理普通聊天请求（非分步分析），支持大模型function calling
     """
-    from llm_services.qwen_engine import chat_with_llm_stream
+    from llm_services.qwen_engine import chat_with_llm
+    from llm_services.tool_manager import tool_manager
+    import json
 
     start_time = datetime.now()
     logger.info(f"[{start_time}] 开始聊天节点处理")
@@ -569,6 +571,10 @@ def chat_node(state: AnalysisState) -> AnalysisState:
         logger.info(f"聊天 - 用户消息: {user_message[:50]}..." if len(user_message) > 50 else f"聊天 - 用户消息: {user_message}")
         logger.info(f"聊天 - 文件内容长度: {len(file_content) if file_content else 0}")
         logger.info(f"聊天 - 历史记录数量: {len(chat_history)}")
+
+        # 获取工具列表
+        tools = tool_manager.get_tools_schema()
+        logger.info(f"可用工具数量: {len(tools)}")
 
         # 准备消息列表，包含历史记录和当前查询
         messages = []
@@ -591,8 +597,8 @@ def chat_node(state: AnalysisState) -> AnalysisState:
             'content': user_message
         })
 
-        # 准备模型参数，使用获取到的聊天历史
-        from ..llm_services.qwen_engine import create_model_params
+        # 准备模型参数
+        from llm_services.qwen_engine import create_model_params
         model_params = create_model_params(
             settings=settings,
             api_key=settings.get('apiKey'),  # 只使用settings中的api_key参数
@@ -601,19 +607,63 @@ def chat_node(state: AnalysisState) -> AnalysisState:
             default_max_tokens=2048   # 使用用户配置的值，但确保足够大
         )
 
-        # 调用模型获取回复
-        full_response = ""
-        for chunk in chat_with_llm_stream(user_message, **model_params):
-            if chunk:
-                full_response += chunk
+        # 调用模型获取回复，传递tools参数
+        logger.info(f"调用大模型，传递{len(tools)}个工具")
+        response = chat_with_llm(
+            user_message,
+            tools=tools,
+            **model_params
+        )
 
+        # 检查是否有工具调用
+        if response.get('tool_calls'):
+            logger.info(f"大模型请求调用工具: {len(response['tool_calls'])} 个")
+            
+            # 执行所有工具调用
+            tool_results = []
+            for tool_call in response['tool_calls']:
+                function_name = tool_call['function']['name']
+                function_args = json.loads(tool_call['function']['arguments'])
+                
+                logger.info(f"执行工具: {function_name}, 参数: {function_args}")
+                
+                # 执行工具
+                execution_result = tool_manager.execute_tool(function_name, function_args)
+                
+                if execution_result['success']:
+                    result_message = f"✅ {execution_result['result']}"
+                    logger.info(f"工具执行成功: {result_message}")
+                    tool_results.append(result_message)
+                else:
+                    result_message = f"❌ 工具执行失败: {execution_result['error']}"
+                    logger.error(f"工具执行失败: {result_message}")
+                    tool_results.append(result_message)
+            
+            # 将工具执行结果返回给用户
+            final_message = "\n\n".join(tool_results)
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            logger.info(f"[{end_time}] 工具调用完成，耗时: {duration:.2f}秒")
+            
+            return {
+                **state,
+                "final_report": final_message,
+                "current_step": "tool_execution",
+                "error": None,
+                "processed": True
+            }
+        
+        # 如果没有工具调用，返回文本响应
+        content = response.get('content', '')
+        
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        logger.info(f"[{end_time}] 聊天回复完成，回复长度: {len(full_response)} 字符, 耗时: {duration:.2f}秒")
+        logger.info(f"[{end_time}] 聊天回复完成，回复长度: {len(content)} 字符, 耗时: {duration:.2f}秒")
 
         return {
             **state,
-            "final_report": full_response,
+            "final_report": content,
             "current_step": "chatting",
             "error": None,
             "processed": True

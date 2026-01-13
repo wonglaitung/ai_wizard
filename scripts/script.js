@@ -1374,7 +1374,20 @@ function handleResponseData(jsonData, outputAiMessageElement, aiMessageElement, 
     else if (jsonData.reply) {
         aiReply += jsonData.reply;
         aiReplyUpdated = true;
-        updateMessageDisplay(aiReply, true);
+        
+        // 检测是否为工具执行结果
+        if (aiReply.includes('✅') || aiReply.includes('❌')) {
+            // 为工具执行结果添加特殊样式
+            const toolResultHtml = `
+                <div class="tool-execution-result">
+                    ${aiReply.replace(/✅/g, '<span class="tool-success">✅</span>')
+                             .replace(/❌/g, '<span class="tool-error">❌</span>')}
+                </div>
+            `;
+            updateMessageDisplay(toolResultHtml, true);
+        } else {
+            updateMessageDisplay(aiReply, true);
+        }
     }
     
     // 返回可能更新的值
