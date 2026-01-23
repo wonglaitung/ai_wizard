@@ -21,20 +21,23 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'llm_services'))
 
 # 导入LangGraph和相关模块
 try:
-    from langgraph_services.analysis_graph import AnalysisState, ChatState, get_analysis_graph, get_chat_graph, get_conditional_graph
-    from llm_services.qwen_engine import chat_with_llm_stream
+    from langgraph_services.analysis_graph import AnalysisState, ChatState, get_analysis_graph, get_chat_graph, get_conditional_graph, get_evaluation_graph
+    from llm_services.qwen_engine import chat_with_llm_stream, chat_with_llm
     from llm_services.chat_history_compressor import compress_chat_history, estimate_token_count
     from llm_services.data_processor import _convert_pandas_types
     # 获取图实例
     analysis_graph = get_analysis_graph()
     chat_graph = get_chat_graph()
     conditional_graph_executor = get_conditional_graph()
+    evaluation_graph = get_evaluation_graph()
 except ImportError as e:
     print(f"导入LangGraph或llm_services模块时出错: {e}")
     analysis_graph = None
     chat_graph = None
     conditional_graph_executor = None
+    evaluation_graph = None
     chat_with_llm_stream = None
+    chat_with_llm = None
     compress_chat_history = None
     _convert_pandas_types = None
     estimate_token_count = None
@@ -598,6 +601,159 @@ def upload_file():
     except Exception as e:
         app.logger.error(f"处理文件上传时出错: {e}")
         return jsonify({'error': f'处理文件上传时出错: {str(e)}'}), 500
+
+@app.route('/api/evaluation', methods=['POST'])
+def evaluation():
+    """处理智能评估的API端点"""
+    app.logger.info('收到智能评估请求')
+    
+    if get_evaluation_graph() is None:
+        app.logger.error('evaluation_graph 未定义，LangGraph服务不可用')
+        def error_generator():
+            yield 'data: ' + json.dumps({'error': '抱歉，LangGraph评估服务不可用。'}) + '\n\n'
+        return Response(error_generator(), mimetype='text/event-stream')
+    
+    try:
+        data = request.json
+        app.logger.debug(f'接收到评估数据: {data}')
+        
+        user_question = data.get('userQuestion', '')
+        evaluation_criteria = data.get('evaluationCriteria', '')
+        follow_up_requirements = data.get('followUpRequirements', '')
+        settings = data.get('settings', {})
+        
+        # 输入验证
+        if not user_question:
+            return jsonify({'error': '用户问题不能为空'}), 400
+        
+        # 获取API密钥
+        api_key = settings.get('apiKey') or os.getenv('QWEN_API_KEY')
+        if not api_key:
+            return jsonify({'error': '未设置API密钥'}), 400
+        
+        # 准备初始状态
+        initial_state = {
+            "user_question": user_question,
+            "evaluation_criteria": evaluation_criteria,
+            "follow_up_requirements": follow_up_requirements,
+            "settings": settings,
+            "current_answer": None,
+            "best_answer": None,
+            "best_score": 0,
+            "score": 0,
+            "feedback": "",
+            "issues": [],
+            "suggestions": [],
+            "attempt_count": 0,
+            "max_attempts": 3,
+            "follow_up_result": None,
+            "current_step": "initial",
+            "error": None,
+            "api_key": api_key
+        }
+        
+        return process_evaluation_workflow_with_langgraph(initial_state)
+        
+    except Exception as e:
+        app.logger.error(f"处理评估请求时出错: {e}")
+        return jsonify({'error': f'处理评估请求时出错：{str(e)}'}), 500
+
+
+def process_evaluation_workflow_with_langgraph(initial_state):
+    """
+    使用LangGraph处理评估工作流程
+    
+    Args:
+        initial_state (dict): 初始状态
+        
+    Returns:
+        Response: 流式响应
+    """
+    app.logger.info('开始LangGraph评估流程（流式输出）')
+    
+    def generate():
+        try:
+            # 获取评估图实例
+            evaluation_graph = get_evaluation_graph()
+            current_state = initial_state.copy()
+            
+            # 使用LangGraph的流API来获取中间结果，增加递归限制
+            for output in evaluation_graph.stream(current_state, config={"recursion_limit": 50}):
+                # 输出是一个字典，键是节点名称，值是该节点的输出状态
+                for node_name, state in output.items():
+                    app.logger.info(f'节点 {node_name} 完成，状态: {state.get("current_step", "unknown")}')
+                    
+                    # 更新当前状态
+                    current_state = state
+                    
+                    # 根据节点类型发送适当的响应
+                    if node_name == "answer_question":
+                        current_answer = state.get("current_answer")
+                        if current_answer:
+                            yield 'data: ' + json.dumps({
+                                'step': 'answering',
+                                'message': '回答生成完成',
+                                'result': current_answer
+                            }) + '\n\n'
+                    elif node_name == "evaluate_answer":
+                        score = state.get("score", 0)
+                        feedback = state.get("feedback", "")
+                        issues = state.get("issues", [])
+                        suggestions = state.get("suggestions", [])
+                        attempt_count = state.get("attempt_count", 0)
+                        
+                        yield 'data: ' + json.dumps({
+                            'step': 'evaluating',
+                            'message': f'第 {attempt_count} 次评估完成，分数: {score}',
+                            'result': {
+                                'score': score,
+                                'feedback': feedback,
+                                'issues': issues,
+                                'suggestions': suggestions
+                            }
+                        }) + '\n\n'
+                        
+                        # 检查是否需要重新回答
+                        if score >= 85:
+                            yield 'data: ' + json.dumps({
+                                'step': 'accepted',
+                                'message': f'回答已接受，分数: {score}'
+                            }) + '\n\n'
+                    elif node_name == "reanswer_question":
+                        current_answer = state.get("current_answer")
+                        attempt_count = state.get("attempt_count", 0)
+                        if current_answer:
+                            yield 'data: ' + json.dumps({
+                                'step': 're-answering',
+                                'message': f'重新回答完成（尝试 {attempt_count}）',
+                                'result': current_answer
+                            }) + '\n\n'
+                    elif node_name == "follow_up":
+                        follow_up_result = state.get("follow_up_result")
+                        if follow_up_result:
+                            yield 'data: ' + json.dumps({
+                                'step': 'following-up',
+                                'message': '跟进处理完成',
+                                'result': follow_up_result
+                            }) + '\n\n'
+            
+            # 检查是否使用了最佳回答
+            best_score = current_state.get("best_score", 0)
+            if best_score > 0 and best_score < 85:
+                yield 'data: ' + json.dumps({
+                    'step': 'max-attempts',
+                    'message': f'已达到最大尝试次数，使用最佳回答（分数: {best_score}）'
+                }) + '\n\n'
+            
+            # 发送结束信号
+            app.logger.info('LangGraph评估流程完成')
+            yield 'data: [DONE]\n\n'
+        except Exception as e:
+            app.logger.error(f"LangGraph评估流程处理时出错: {e}")
+            yield 'data: ' + json.dumps({'error': f'LangGraph评估流程处理时出错：{str(e)}'}) + '\n\n'
+    
+    return Response(generate(), mimetype='text/event-stream')
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5005)

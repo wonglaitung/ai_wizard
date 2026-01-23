@@ -374,6 +374,32 @@ document.addEventListener('DOMContentLoaded', function() {
     if (downloadWordBtn) {
         downloadWordBtn.addEventListener('click', exportToWord);
     }
+    
+    // 智能评估页面相关元素
+    const startEvaluationBtn = document.getElementById('start-evaluation');
+    const clearEvaluationBtn = document.getElementById('clear-evaluation');
+    const closeResultsBtn = document.getElementById('close-results');
+    const evaluationResults = document.getElementById('evaluation-results');
+    const resultsContent = document.getElementById('results-content');
+    
+    // 开始评估按钮事件
+    if (startEvaluationBtn) {
+        startEvaluationBtn.addEventListener('click', startEvaluation);
+    }
+    
+    // 清除评估结果按钮事件
+    if (clearEvaluationBtn) {
+        clearEvaluationBtn.addEventListener('click', clearEvaluationResults);
+    }
+    
+    // 关闭结果按钮事件
+    if (closeResultsBtn) {
+        closeResultsBtn.addEventListener('click', function() {
+            if (evaluationResults) {
+                evaluationResults.classList.add('hidden');
+            }
+        });
+    }
 });
 
 // 估算文本token数量的函数（改进版）
@@ -1202,13 +1228,23 @@ function showFunnelIndicator() {
     funnelElement.style.backgroundColor = '#f9f9f9';
     funnelElement.style.zIndex = '1000';
     
-    // 根据输出开关状态决定显示位置
-    if (outputToggle.checked) {
-        outputMessages.appendChild(funnelElement);
-        outputMessages.scrollTop = outputMessages.scrollHeight;
+    // 检查是否在评估页面
+    const evaluationPage = document.getElementById('evaluation-page');
+    const resultsContent = document.getElementById('results-content');
+    
+    if (evaluationPage && evaluationPage.classList.contains('active') && resultsContent) {
+        // 在评估页面显示
+        resultsContent.appendChild(funnelElement);
+        resultsContent.scrollTop = resultsContent.scrollHeight;
     } else {
-        chatMessages.appendChild(funnelElement);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        // 根据输出开关状态决定显示位置
+        if (outputToggle.checked) {
+            outputMessages.appendChild(funnelElement);
+            outputMessages.scrollTop = outputMessages.scrollHeight;
+        } else {
+            chatMessages.appendChild(funnelElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
     }
 }
 
@@ -1502,6 +1538,252 @@ function exportToWord() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+// 开始评估函数
+async function startEvaluation() {
+    const userQuestion = document.getElementById('user-question').value.trim();
+    const evaluationCriteria = document.getElementById('evaluation-criteria').value.trim();
+    const followUpRequirements = document.getElementById('follow-up-requirements').value.trim();
+    
+    // 输入验证
+    if (!userQuestion) {
+        alert('请输入用户问题');
+        return;
+    }
+    
+    // 显示结果区域
+    const evaluationResults = document.getElementById('evaluation-results');
+    const resultsContent = document.getElementById('results-content');
+    if (evaluationResults) {
+        evaluationResults.classList.remove('hidden');
+    }
+    if (resultsContent) {
+        resultsContent.innerHTML = '';
+    }
+    
+    // 显示漏斗图标
+    showFunnelIndicator();
+    
+    // 添加处理中提示
+    addEvaluationMessage('正在处理评估请求...', 'info');
+    
+    try {
+        // 获取保存的设置
+        let settings = {
+            modelName: 'qwen-max',
+            temperature: 0.7,
+            maxTokens: 8196,
+            topP: 0.9,
+            frequencyPenalty: 0.5,
+            baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+            apiKey: ''
+        };
+        
+        const savedSettings = localStorage.getItem('aiSettings');
+        if (savedSettings) {
+            settings = {...settings, ...JSON.parse(savedSettings)};
+        }
+        
+        // 调用后端API
+        const response = await fetch('/api/evaluation', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userQuestion: userQuestion,
+                evaluationCriteria: evaluationCriteria,
+                followUpRequirements: followUpRequirements,
+                settings: settings
+            })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorMessage = `HTTP error! status: ${response.status}`;
+            
+            try {
+                const errorData = JSON.parse(errorText);
+                if (errorData && errorData.error) {
+                    errorMessage = `API错误 [${response.status}]: ${errorData.error}`;
+                }
+            } catch (e) {
+                if (errorText) {
+                    errorMessage = `API错误 [${response.status}]: ${errorText}`;
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+        
+        // 处理流式响应
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        let buffer = '';
+        
+        while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            
+            if (value) {
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+                
+                let lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        
+                        if (data === '[DONE]') {
+                            addEvaluationMessage('评估完成！', 'success');
+                            done = true;
+                            hideFunnelIndicator();
+                            break;
+                        }
+                        
+                        try {
+                            if (!data || data.trim() === '') {
+                                continue;
+                            }
+                            
+                            const jsonData = JSON.parse(data);
+                            
+                            if (jsonData.error) {
+                                addEvaluationMessage(`错误: ${jsonData.error}`, 'error');
+                                hideFunnelIndicator();
+                                break;
+                            }
+                            
+                            // 处理不同步骤的消息
+                            handleEvaluationStep(jsonData);
+                            
+                        } catch (e) {
+                            console.error('Error parsing JSON:', e, 'Raw data:', data);
+                        }
+                    }
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('评估请求错误:', error);
+        addEvaluationMessage(`错误: ${error.message}`, 'error');
+        hideFunnelIndicator();
+    }
+}
+
+// 处理评估步骤
+function handleEvaluationStep(jsonData) {
+    const step = jsonData.step;
+    const message = jsonData.message;
+    const result = jsonData.result;
+    
+    switch (step) {
+        case 'answering':
+            if (result) {
+                addEvaluationMessage('回答生成完成：', 'success');
+                addEvaluationMessage(result, 'answer');
+            } else {
+                addEvaluationMessage(message, 'info');
+            }
+            break;
+            
+        case 'evaluating':
+            if (result) {
+                const score = result.score;
+                const feedback = result.feedback;
+                const issues = result.issues;
+                const suggestions = result.suggestions;
+                
+                addEvaluationMessage(`评估完成（分数: ${score}/100）：`, score >= 85 ? 'success' : 'warning');
+                addEvaluationMessage(`反馈: ${feedback}`, 'feedback');
+                
+                if (issues && issues.length > 0) {
+                    addEvaluationMessage(`问题点: ${issues.join(', ')}`, 'error');
+                }
+                
+                if (suggestions && suggestions.length > 0) {
+                    addEvaluationMessage(`建议: ${suggestions.join(', ')}`, 'info');
+                }
+            } else {
+                addEvaluationMessage(message, 'info');
+            }
+            break;
+            
+        case 're-answering':
+            if (result) {
+                addEvaluationMessage('重新回答完成：', 'info');
+                addEvaluationMessage(result, 'answer');
+            } else {
+                addEvaluationMessage(message, 'warning');
+            }
+            break;
+            
+        case 'accepted':
+            addEvaluationMessage(message, 'success');
+            break;
+            
+        case 'max-attempts':
+            addEvaluationMessage(message, 'warning');
+            break;
+            
+        case 'following-up':
+            if (result) {
+                addEvaluationMessage('跟进处理完成：', 'success');
+                addEvaluationMessage(result, 'followup');
+            } else {
+                addEvaluationMessage(message, 'info');
+            }
+            break;
+            
+        default:
+            addEvaluationMessage(message, 'info');
+    }
+}
+
+// 添加评估消息
+function addEvaluationMessage(message, type) {
+    const resultsContent = document.getElementById('results-content');
+    if (!resultsContent) return;
+    
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('evaluation-message');
+    messageElement.classList.add(`evaluation-${type}`);
+    
+    // 使用marked.js渲染Markdown
+    if (typeof marked !== 'undefined') {
+        messageElement.innerHTML = marked.parse(message);
+    } else {
+        messageElement.textContent = message;
+    }
+    
+    resultsContent.appendChild(messageElement);
+    
+    // 滚动到底部
+    resultsContent.scrollTop = resultsContent.scrollHeight;
+}
+
+// 清除评估结果
+function clearEvaluationResults() {
+    if (confirm('确定要清除所有评估结果吗？')) {
+        document.getElementById('user-question').value = '';
+        document.getElementById('evaluation-criteria').value = '';
+        document.getElementById('follow-up-requirements').value = '';
+        
+        const evaluationResults = document.getElementById('evaluation-results');
+        const resultsContent = document.getElementById('results-content');
+        
+        if (evaluationResults) {
+            evaluationResults.classList.add('hidden');
+        }
+        if (resultsContent) {
+            resultsContent.innerHTML = '';
+        }
+    }
 }
 
 

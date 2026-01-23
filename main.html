@@ -20,6 +20,10 @@
                     <span>💬</span>
                     <span>新对话</span>
                 </li>
+                <li class="menu-item" data-page="evaluation">
+                    <span>🎯</span>
+                    <span>智能评估</span>
+                </li>
                 <li class="menu-item" data-page="config">
                     <span>⚙️</span>
                     <span>配置</span>
@@ -81,6 +85,46 @@
                         <button id="download-word" class="download-word-btn" title="下载为Word文档">📄</button>
                     </div>
                     <div id="output-messages" class="output-messages"></div>
+                </div>
+            </div>
+
+            <!-- 智能评估页面 -->
+            <div id="evaluation-page" class="page">
+                <div class="evaluation-container">
+                    <h2>智能评估与跟进</h2>
+                    <div class="evaluation-layout">
+                        <!-- 左侧输入区域 -->
+                        <div class="evaluation-form">
+                            <div class="evaluation-group">
+                                <label for="user-question">用户问题:</label>
+                                <textarea id="user-question" placeholder="请输入您的问题..." rows="3"></textarea>
+                            </div>
+                            
+                            <div class="evaluation-group">
+                                <label for="evaluation-criteria">评估条件:</label>
+                                <textarea id="evaluation-criteria" placeholder="请输入评估条件，例如：回答需要准确、全面、有条理..." rows="3"></textarea>
+                            </div>
+                            
+                            <div class="evaluation-group">
+                                <label for="follow-up-requirements">跟进要求:</label>
+                                <textarea id="follow-up-requirements" placeholder="请输入跟进要求（可选），例如：对回答进行总结、提取关键信息..." rows="3"></textarea>
+                            </div>
+                            
+                            <div class="evaluation-actions">
+                                <button id="start-evaluation" class="start-btn">开始评估</button>
+                                <button id="clear-evaluation" class="clear-eval-btn">清除结果</button>
+                            </div>
+                        </div>
+                        
+                        <!-- 右侧评估结果显示区域 -->
+                        <div id="evaluation-results" class="evaluation-results hidden">
+                            <div class="results-header">
+                                <h3>评估结果</h3>
+                                <button id="close-results" class="close-results-btn">&times;</button>
+                            </div>
+                            <div id="results-content" class="results-content"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

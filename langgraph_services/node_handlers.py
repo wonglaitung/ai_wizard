@@ -689,3 +689,359 @@ def chat_node(state: AnalysisState) -> AnalysisState:
             "current_step": "chat_error",
             "processed": True
         }
+
+
+# ==================== 评估流程节点函数 ====================
+
+def answer_question_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    回答问题节点
+    使用大模型回答用户问题
+    """
+    from .analysis_graph import EvaluationState
+    from llm_services.qwen_engine import chat_with_llm
+    
+    start_time = datetime.now()
+    logger.info(f"[{start_time}] 开始回答问题节点处理")
+    
+    try:
+        user_question = state["user_question"]
+        api_key = state["api_key"]
+        settings = state.get("settings", {})
+        
+        # 构建回答提示词
+        answer_prompt = f"请回答以下问题：{user_question}"
+        
+        # 调用大模型
+        response = chat_with_llm(
+            query=answer_prompt,
+            model=settings.get('modelName', 'qwen-max'),
+            temperature=settings.get('temperature', 0.7),
+            max_tokens=settings.get('maxTokens', 8196),
+            top_p=settings.get('topP', 0.9),
+            frequency_penalty=settings.get('frequencyPenalty', 0.5),
+            api_key=api_key,
+            base_url=settings.get('baseUrl')
+        )
+        
+        current_answer = response['content']
+        
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.info(f"[{end_time}] 回答问题完成，回答长度: {len(current_answer)} 字符, 耗时: {duration:.2f}秒")
+        
+        return {
+            **state,
+            "current_answer": current_answer,
+            "current_step": "answering",
+            "error": None
+        }
+    except Exception as e:
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.error(f"[{end_time}] 回答问题节点出错，耗时: {duration:.2f}秒, 错误: {str(e)}")
+        return {
+            **state,
+            "error": f"回答问题失败: {str(e)}",
+            "current_step": "answer_error"
+        }
+
+
+def evaluate_answer_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    评估回答节点
+    使用大模型评估回答的质量
+    """
+    from llm_services.qwen_engine import chat_with_llm
+    import re
+    
+    start_time = datetime.now()
+    logger.info(f"[{start_time}] 开始评估回答节点处理")
+    
+    try:
+        user_question = state["user_question"]
+        current_answer = state["current_answer"]
+        evaluation_criteria = state.get("evaluation_criteria", "")
+        api_key = state["api_key"]
+        settings = state.get("settings", {})
+        
+        # 构建评估提示词
+        if evaluation_criteria:
+            eval_prompt = f"""请根据以下评估条件对回答进行评估：
+
+评估条件：{evaluation_criteria}
+
+用户问题：{user_question}
+
+回答：{current_answer}
+
+请以JSON格式返回评估结果，包含以下字段：
+- score: 评估分数（0-100）
+- feedback: 评估反馈，指出回答的优点和不足
+- issues: 如果分数低于85分，列出具体的问题点
+- suggestions: 改进建议
+
+请确保返回有效的JSON格式。"""
+        else:
+            eval_prompt = f"""请对以下回答进行评估：
+
+用户问题：{user_question}
+
+回答：{current_answer}
+
+请以JSON格式返回评估结果，包含以下字段：
+- score: 评估分数（0-100）
+- feedback: 评估反馈，指出回答的优点和不足
+- issues: 如果分数低于85分，列出具体的问题点
+- suggestions: 改进建议
+
+请确保返回有效的JSON格式。"""
+        
+        # 调用大模型进行评估
+        response = chat_with_llm(
+            query=eval_prompt,
+            model=settings.get('modelName', 'qwen-max'),
+            temperature=0.3,  # 使用较低的温度以获得更稳定的评估
+            max_tokens=settings.get('maxTokens', 8196),
+            top_p=settings.get('topP', 0.9),
+            frequency_penalty=0,
+            api_key=api_key,
+            base_url=settings.get('baseUrl')
+        )
+        
+        eval_content = response['content']
+        
+        # 尝试解析JSON
+        try:
+            # 提取JSON部分（可能包含Markdown代码块）
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', eval_content, re.DOTALL)
+            if json_match:
+                eval_result = json.loads(json_match.group(1))
+            else:
+                # 尝试直接解析
+                json_match = re.search(r'\{.*\}', eval_content, re.DOTALL)
+                if json_match:
+                    eval_result = json.loads(json_match.group(0))
+                else:
+                    # 如果无法解析，使用默认值
+                    eval_result = {
+                        'score': 70,
+                        'feedback': eval_content,
+                        'issues': ['无法解析评估结果'],
+                        'suggestions': ['请重新评估']
+                    }
+            
+            score = eval_result.get('score', 70)
+            feedback = eval_result.get('feedback', '')
+            issues = eval_result.get('issues', [])
+            suggestions = eval_result.get('suggestions', [])
+            
+            # 更新最佳回答
+            best_answer = state.get("best_answer", current_answer)
+            best_score = state.get("best_score", 0)
+            
+            if score > best_score:
+                best_answer = current_answer
+                best_score = score
+            
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            logger.info(f"[{end_time}] 评估回答完成，分数: {score}, 耗时: {duration:.2f}秒")
+            
+            return {
+                **state,
+                "score": score,
+                "feedback": feedback,
+                "issues": issues,
+                "suggestions": suggestions,
+                "best_answer": best_answer,
+                "best_score": best_score,
+                "current_step": "evaluating",
+                "error": None
+            }
+        except json.JSONDecodeError as e:
+            end_time = datetime.now()
+            duration = (end_time - start_time).total_seconds()
+            logger.error(f"[{end_time}] 评估回答节点JSON解析失败，耗时: {duration:.2f}秒, 错误: {str(e)}")
+            return {
+                **state,
+                "score": 70,
+                "feedback": eval_content,
+                "issues": ['解析失败'],
+                "suggestions": [],
+                "current_step": "evaluating",
+                "error": None
+            }
+    except Exception as e:
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.error(f"[{end_time}] 评估回答节点出错，耗时: {duration:.2f}秒, 错误: {str(e)}")
+        return {
+            **state,
+            "error": f"评估回答失败: {str(e)}",
+            "current_step": "evaluate_error"
+        }
+
+
+def should_continue_evaluation(state: Dict[str, Any]) -> str:
+    """
+    决定是否继续评估的条件函数
+    """
+    score = state.get("score", 0)
+    attempt_count = state.get("attempt_count", 0)
+    max_attempts = state.get("max_attempts", 3)
+    
+    logger.info(f"条件函数检查 - 当前分数: {score}, 尝试次数: {attempt_count}, 最大尝试次数: {max_attempts}")
+    
+    # 如果分数达到85分，接受回答
+    if score >= 85:
+        logger.info(f"分数 {score} >= 85，接受回答")
+        return "accept"
+    
+    # 如果达到最大尝试次数，使用最佳回答
+    if attempt_count >= max_attempts:
+        logger.info(f"达到最大尝试次数 {max_attempts}，使用最佳回答")
+        return "use_best"
+    
+    # 否则，继续重新回答
+    logger.info(f"分数 {score} < 85，需要重新回答")
+    return "reanswer"
+
+
+def reanswer_question_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    重新回答节点
+    根据评估反馈重新生成回答
+    """
+    from llm_services.qwen_engine import chat_with_llm
+    
+    start_time = datetime.now()
+    logger.info(f"[{start_time}] 开始重新回答节点处理")
+    
+    try:
+        user_question = state["user_question"]
+        current_answer = state["current_answer"]
+        feedback = state.get("feedback", "")
+        issues = state.get("issues", [])
+        suggestions = state.get("suggestions", [])
+        api_key = state["api_key"]
+        settings = state.get("settings", {})
+        
+        # 构建改进提示词
+        improve_prompt = f"""用户问题：{user_question}
+
+之前的回答：{current_answer}
+
+评估反馈：{feedback}
+
+问题点：{', '.join(issues) if issues else '无'}
+
+改进建议：{', '.join(suggestions) if suggestions else '无'}
+
+请根据以上反馈和建议，重新生成一个更好的回答。"""
+        
+        # 调用大模型
+        response = chat_with_llm(
+            query=improve_prompt,
+            model=settings.get('modelName', 'qwen-max'),
+            temperature=settings.get('temperature', 0.7),
+            max_tokens=settings.get('maxTokens', 8196),
+            top_p=settings.get('topP', 0.9),
+            frequency_penalty=settings.get('frequencyPenalty', 0.5),
+            api_key=api_key,
+            base_url=settings.get('baseUrl')
+        )
+        
+        new_answer = response['content']
+        
+        # 增加尝试次数
+        attempt_count = state.get("attempt_count", 0) + 1
+        
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.info(f"[{end_time}] 重新回答完成，回答长度: {len(new_answer)} 字符, 尝试次数: {attempt_count}, 耗时: {duration:.2f}秒")
+        
+        return {
+            **state,
+            "current_answer": new_answer,
+            "attempt_count": attempt_count,
+            "current_step": "reanswering",
+            "error": None
+        }
+    except Exception as e:
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.error(f"[{end_time}] 重新回答节点出错，耗时: {duration:.2f}秒, 错误: {str(e)}")
+        return {
+            **state,
+            "error": f"重新回答失败: {str(e)}",
+            "current_step": "reanswer_error"
+        }
+
+
+def follow_up_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    跟进处理节点
+    对接受的回答进行跟进处理
+    """
+    from llm_services.qwen_engine import chat_with_llm
+    
+    start_time = datetime.now()
+    logger.info(f"[{start_time}] 开始跟进处理节点处理")
+    
+    try:
+        follow_up_requirements = state.get("follow_up_requirements", "").strip()
+        best_answer = state.get("best_answer", state.get("current_answer", ""))
+        api_key = state["api_key"]
+        settings = state.get("settings", {})
+        
+        # 如果没有跟进要求，直接返回
+        if not follow_up_requirements:
+            logger.info("没有跟进要求，跳过跟进处理")
+            return {
+                **state,
+                "follow_up_result": None,
+                "current_step": "completed",
+                "error": None
+            }
+        
+        # 构建跟进提示词
+        follow_up_prompt = f"""已接受的回答：{best_answer}
+
+跟进要求：{follow_up_requirements}
+
+请根据跟进要求对回答进行处理。"""
+        
+        # 调用大模型
+        response = chat_with_llm(
+            query=follow_up_prompt,
+            model=settings.get('modelName', 'qwen-max'),
+            temperature=settings.get('temperature', 0.7),
+            max_tokens=settings.get('maxTokens', 8196),
+            top_p=settings.get('topP', 0.9),
+            frequency_penalty=settings.get('frequencyPenalty', 0.5),
+            api_key=api_key,
+            base_url=settings.get('baseUrl')
+        )
+        
+        follow_up_result = response['content']
+        
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.info(f"[{end_time}] 跟进处理完成，结果长度: {len(follow_up_result)} 字符, 耗时: {duration:.2f}秒")
+        
+        return {
+            **state,
+            "follow_up_result": follow_up_result,
+            "current_step": "completed",
+            "error": None
+        }
+    except Exception as e:
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+        logger.error(f"[{end_time}] 跟进处理节点出错，耗时: {duration:.2f}秒, 错误: {str(e)}")
+        return {
+            **state,
+            "error": f"跟进处理失败: {str(e)}",
+            "current_step": "follow_up_error"
+        }

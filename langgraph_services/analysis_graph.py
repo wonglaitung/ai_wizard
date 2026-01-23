@@ -75,6 +75,27 @@ class ChatState(TypedDict):
     processed: bool  # 标记是否已处理
 
 
+class EvaluationState(TypedDict):
+    """评估流程状态定义"""
+    user_question: str  # 用户问题
+    evaluation_criteria: str  # 评估条件
+    follow_up_requirements: str  # 跟进要求
+    settings: Dict[str, Any]  # 模型设置
+    current_answer: Optional[str]  # 当前回答
+    best_answer: Optional[str]  # 最佳回答
+    best_score: float  # 最佳分数
+    score: float  # 当前分数
+    feedback: str  # 评估反馈
+    issues: List[str]  # 问题点
+    suggestions: List[str]  # 改进建议
+    attempt_count: int  # 尝试次数
+    max_attempts: int  # 最大尝试次数
+    follow_up_result: Optional[str]  # 跟进处理结果
+    current_step: str  # 当前步骤
+    error: Optional[str]  # 错误信息
+    api_key: Optional[str]  # API密钥
+
+
 def plan_analysis_task_node(state: AnalysisState) -> AnalysisState:
     """
     任务规划节点
@@ -355,3 +376,58 @@ def get_chat_graph():
 
 def get_conditional_graph():
     return create_conditional_graph()
+
+
+# ==================== 评估流程图 ====================
+
+def create_evaluation_graph():
+    """
+    创建评估流程图
+    使用LangGraph实现迭代评估流程
+    """
+    from .node_handlers import (
+        answer_question_node,
+        evaluate_answer_node,
+        reanswer_question_node,
+        follow_up_node,
+        should_continue_evaluation
+    )
+    
+    # 创建状态图
+    workflow = StateGraph(EvaluationState)
+    
+    # 添加节点
+    workflow.add_node("answer_question", answer_question_node)
+    workflow.add_node("evaluate_answer", evaluate_answer_node)
+    workflow.add_node("reanswer_question", reanswer_question_node)
+    workflow.add_node("follow_up", follow_up_node)
+    
+    # 设置入口点
+    workflow.set_entry_point("answer_question")
+    
+    # 添加边
+    workflow.add_edge("answer_question", "evaluate_answer")
+    
+    # 添加条件边：根据评估结果决定下一步
+    workflow.add_conditional_edges(
+        "evaluate_answer",
+        should_continue_evaluation,
+        {
+            "accept": "follow_up",  # 接受回答，进入跟进处理
+            "use_best": "follow_up",  # 使用最佳回答，进入跟进处理
+            "reanswer": "reanswer_question"  # 重新回答
+        }
+    )
+    
+    workflow.add_edge("reanswer_question", "evaluate_answer")
+    workflow.add_edge("follow_up", END)
+    
+    # 编译图
+    return workflow.compile()
+
+
+def get_evaluation_graph():
+    """
+    获取评估流程图实例（延迟初始化）
+    """
+    return create_evaluation_graph()
