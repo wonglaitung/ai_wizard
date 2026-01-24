@@ -91,7 +91,22 @@
             <!-- 智能评估页面 -->
             <div id="evaluation-page" class="page">
                 <div class="evaluation-container">
-                    <h2>智能评估与跟进</h2>
+                    <h2>
+                        智能评估与跟进
+                        <span class="help-icon">❓
+                            <div class="help-tooltip">
+                                <p class="help-title">目的：</p>
+                                <p class="help-content">通过多轮迭代评估，确保AI回答的质量和准确性</p>
+                                <p class="help-title">实现原理：</p>
+                                <ol class="help-list">
+                                    <li>AI根据用户问题生成初始回答</li>
+                                    <li>根据评估条件对回答进行评分（0-100分）</li>
+                                    <li>如果分数低于85分，自动重新回答（最多3次）</li>
+                                    <li>最终根据跟进要求生成总结或提取关键信息</li>
+                                </ol>
+                            </div>
+                        </span>
+                    </h2>
                     <div class="evaluation-layout">
                         <!-- 左侧输入区域 -->
                         <div class="evaluation-form">
