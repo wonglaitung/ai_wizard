@@ -303,17 +303,10 @@ document.addEventListener('DOMContentLoaded', function() {
             button.addEventListener('click', () => {
                 const question = button.getAttribute('data-question');
                 
-                // 如果是"展示一个销售数据表格"，自动打开图表输出开关
-                if (question === "展示一个销售数据表格" && outputToggle && !outputToggle.checked) {
-                    outputToggle.checked = true;
-                    // 触发change事件以确保UI更新
-                    outputToggle.dispatchEvent(new Event('change'));
-                }
-                
-                // 显示用户消息
-                displayMessage(question, 'user');
-                // 调用AI接口获取回复
-                getAIResponse(question);
+                // 将问题放入输入框
+                userInput.value = question;
+                // 聚焦到输入框
+                userInput.focus();
             });
         });
     }
