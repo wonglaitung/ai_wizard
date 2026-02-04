@@ -14,6 +14,37 @@ chat_url = f"{default_base_url}/chat/completions"
 max_tokens = int(os.getenv('MAX_TOKENS', 16384))
 
 
+def _filter_reasoning_content(content):
+    """
+    过滤掉推理过程，只保留最终回复
+    
+    新模型（如qwen3）的响应中，content字段可能包含推理过程和最终回复。
+    推理过程在前面，与最终回复之间用 "</think>" 分隔。
+    此函数提取 "</think>" 之后的最终回复部分。
+    
+    Args:
+        content (str): 包含推理过程和最终回复的完整内容
+        
+    Returns:
+        str: 只包含最终回复的内容
+    """
+    if not content:
+        return content
+    
+    # 查找第一个 "\n\n" 分隔符
+    separator = '</think>'
+    if separator in content:
+        # 分割内容，只保留 "</think>" 之后的部分
+        parts = content.split(separator, 1)
+        final_content = parts[1].strip()
+        if final_content:
+            logger.info(f"[FILTER] 检测到推理过程，已过滤掉 {len(parts[0])} 个字符")
+            return final_content
+    
+    # 如果没有 "</think>" 分隔符，返回原始内容
+    return content
+
+
 def _validate_and_limit_params(temperature, max_tokens, top_p, frequency_penalty):
     """验证并限制参数值在API允许范围内"""
     validated_temperature = max(0.0, min(2.0, temperature))  # 通常temperature范围是0-2
@@ -201,8 +232,12 @@ def create_model_params(settings=None, api_key=None, default_model='qwen-max', d
 
 
 def _process_streaming_response(response, model):
-    """处理流式响应"""
+    """处理流式响应，过滤掉推理过程"""
     full_response = ""
+    in_reasoning = True  # 初始状态：假设在推理过程中
+    buffer = ""  # 缓冲区，用于检测 "</think>" 分隔符
+    separator = '</think>'
+
     for line in response.iter_lines():
         if line:
             decoded_line = line.decode('utf-8')
@@ -216,7 +251,22 @@ def _process_streaming_response(response, model):
                             if 'content' in delta:
                                 content = delta['content']
                                 full_response += content
-                                yield content
+                                
+                                # 如果在推理过程中，将内容添加到缓冲区
+                                if in_reasoning:
+                                    buffer += content
+                                    # 检查缓冲区中是否包含 "</think>" 分隔符
+                                    if separator in buffer:
+                                        in_reasoning = False
+                                        # 提取 "</think>" 之后的部分并输出
+                                        parts = buffer.split(separator, 1)
+                                        final_part = parts[1]
+                                        if final_part:
+                                            yield final_part
+                                        logger.info(f"[STREAM FILTER] 检测到推理过程结束，开始输出最终回复")
+                                else:
+                                    # 已经在最终回复阶段，直接输出
+                                    yield content
                     except json.JSONDecodeError:
                         # 如果不是JSON数据，跳过
                         continue
@@ -353,6 +403,10 @@ def chat_with_llm(query, model='qwen-max', temperature=0.7, max_tokens=8196, top
         # 提取内容和工具调用信息
         content = message.get('content', '')
         tool_calls = message.get('tool_calls', None)
+        
+        # 过滤掉推理过程，只保留最终回复
+        if content:
+            content = _filter_reasoning_content(content)
         
         # 记录响应信息
         if content:
